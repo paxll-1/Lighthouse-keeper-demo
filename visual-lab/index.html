@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
   <meta name="theme-color" content="#87a8ad">
-  <meta name="lighthouse-visual-build" content="visual-lab-2026-10-22-r1">
+  <meta name="lighthouse-visual-build" content="visual-lab-2026-10-22-r2">
   <link rel="icon" href="data:,">
   <title>Маяк · этюд берега</title>
   <link rel="stylesheet" href="./styles.css">
@@ -18,11 +18,22 @@
       <p>Отдельная пробная сцена. Игровой остров и прогресс сохранены.</p>
     </header>
     <div class="top-actions">
-      <button id="reset" title="Вернуть исходный ракурс" aria-label="Вернуть исходный ракурс">↺</button>
+      <button id="reset" title="Сбросить камеру" aria-label="Сбросить камеру"><span>↺</span><small>Сброс</small></button>
       <button id="fullscreen" title="Развернуть сцену" aria-label="Развернуть сцену">⛶</button>
     </div>
     <div id="notice" role="status" aria-live="polite" hidden></div>
     <aside id="tools" aria-label="Управление этюдом">
+      <div class="inspection">
+        <nav class="view-buttons" aria-label="Готовые ракурсы">
+          <button id="view-overview" aria-pressed="true">Общий вид</button>
+          <button id="view-lighthouse" aria-pressed="false">Маяк крупно</button>
+          <button id="view-shore" aria-pressed="false">Берег крупно</button>
+        </nav>
+        <div class="zoom-buttons" aria-label="Приближение">
+          <button id="zoom-out" aria-label="Отдалить" title="Отдалить">−</button>
+          <button id="zoom-in" aria-label="Приблизить" title="Приблизить">+</button>
+        </div>
+      </div>
       <div class="main-row">
         <label class="motion"><input id="motion" type="checkbox" checked> Ветер и море</label>
         <button id="compare" aria-expanded="false" aria-controls="comparison">Сравнить картинку</button>
@@ -35,7 +46,7 @@
         <label><input id="route" type="checkbox"> Медленный облёт</label>
         <label><input id="diagnostics" type="checkbox"> Показать показатели</label>
       </div>
-      <p class="hint">Проведи пальцем, чтобы немного изменить ракурс.</p>
+      <p class="hint">Щипок — масштаб. Проведи пальцем — поворот.</p>
       <output id="stats" hidden></output>
     </aside>
     <noscript>Для отдельной визуальной сцены нужен JavaScript. Рабочая демка не изменена.</noscript>
