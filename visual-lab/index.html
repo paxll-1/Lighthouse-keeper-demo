@@ -1,0 +1,45 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+  <meta name="theme-color" content="#87a8ad">
+  <meta name="lighthouse-visual-build" content="visual-lab-2026-10-22-r1">
+  <link rel="icon" href="data:,">
+  <title>Маяк · этюд берега</title>
+  <link rel="stylesheet" href="./styles.css">
+</head>
+<body>
+  <main id="stage" aria-label="Отдельный визуальный этюд маяка">
+    <div id="surface" aria-label="Сцена маяка и берега"></div>
+    <header>
+      <div class="eyebrow">Маяк · визуальный этюд</div>
+      <h1>Там, где ждёт берег</h1>
+      <p>Отдельная пробная сцена. Игровой остров и прогресс сохранены.</p>
+    </header>
+    <div class="top-actions">
+      <button id="reset" title="Вернуть исходный ракурс" aria-label="Вернуть исходный ракурс">↺</button>
+      <button id="fullscreen" title="Развернуть сцену" aria-label="Развернуть сцену">⛶</button>
+    </div>
+    <div id="notice" role="status" aria-live="polite" hidden></div>
+    <aside id="tools" aria-label="Управление этюдом">
+      <div class="main-row">
+        <label class="motion"><input id="motion" type="checkbox" checked> Ветер и море</label>
+        <button id="compare" aria-expanded="false" aria-controls="comparison">Сравнить картинку</button>
+      </div>
+      <div id="comparison" hidden>
+        <p class="explain">Один берег и одна камера. Меняются способ рисования и обработка цвета.</p>
+        <label>Рендер <select id="backend"><option value="three">Three.js · WebGL2</option><option value="native">Текущий · исправленный WebGL1</option><option value="canvas">Canvas · запасной режим</option></select></label>
+        <label>Облик <select id="style"><option value="art">Художественный</option><option value="baseline">Равные базовые условия</option></select></label>
+        <label>Чёткость <select id="dpr"><option value="1">1×</option><option value="1.5">1.5×</option><option value="2">2×</option></select></label>
+        <label><input id="route" type="checkbox"> Медленный облёт</label>
+        <label><input id="diagnostics" type="checkbox"> Показать показатели</label>
+      </div>
+      <p class="hint">Проведи пальцем, чтобы немного изменить ракурс.</p>
+      <output id="stats" hidden></output>
+    </aside>
+    <noscript>Для отдельной визуальной сцены нужен JavaScript. Рабочая демка не изменена.</noscript>
+  </main>
+  <script type="module" src="./app.js"></script>
+</body>
+</html>
