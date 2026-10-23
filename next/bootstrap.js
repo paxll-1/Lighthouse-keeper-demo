@@ -1,6 +1,6 @@
 // Start the game owner only after the renderer can create WebGL2. The storage
 // experiment keeps a separate save branch; unsupported browsers touch neither.
-const BUILD = 'island-ui-2026-10-23-r1';
+const BUILD = 'island-bench-2026-10-23-r1';
 globalThis.ThreeIslandPreview = { build: BUILD, ready: false, error: null };
 const status = document.getElementById('boot-status');
 function failed(error) {
@@ -13,14 +13,17 @@ function failed(error) {
   document.getElementById('legacy-link').hidden = false;
 }
 try {
-  await import('./config.js');
-  await import('./model.js');
-  await import('./renderer.js');
-  await import('./world.js');
-  await import('./scene.js');
-  await import('./ui.js');
-  await import('./interface.js');
-  await import('./app.js');
+  await import('./config.js?build='+BUILD);
+  await import('./model.js?build='+BUILD);
+  await import('./renderer.js?build='+BUILD);
+  await import('./coast.js?build='+BUILD);
+  await import('./world.js?build='+BUILD);
+  await import('./scene.js?build='+BUILD);
+  await import('./ui.js?build='+BUILD);
+  await import('./interface.js?build='+BUILD);
+  await import('./gear.js?build='+BUILD);
+  await import('./bench-ui.js?build='+BUILD);
+  await import('./app.js?build='+BUILD);
   if (!globalThis.CloseDemo) throw new Error('Game startup did not complete');
   ThreeIslandPreview.ready = true;
   document.getElementById('game').setAttribute('aria-busy', 'false');

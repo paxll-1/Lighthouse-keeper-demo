@@ -329,39 +329,6 @@
       else P.blob(x,y+.035,z,.055+seed(i)*.07,.04,.055,'#c7bd9e');
     }
   }
-  function gull(P,x,y,z,heading,flying=false,flap=0){
-    // No tag or game state: the bird is a small ambient silhouette on outer rock.
-    P.group({x,y,z,ry:heading},()=>{
-      P.blob(0,.18,0,.095,.105,.18,'#dce2ce');
-      P.blob(0,.29,.14,.067,.07,.073,'#edf0d9');
-      P.poly([[-.028,.285,.195],[.028,.285,.195],[0,.267,.277]],'#c2a570');
-      P.poly([[-.05,.18,-.14],[.05,.18,-.14],[.035,.15,-.3],[-.035,.15,-.3]],'#b6c9be');
-      if(flying){
-        for(const side of [-1,1]){
-          const tip=side*.49,lift=.15+flap*.14;
-          P.poly([[side*.06,.2,.08],[side*.27,.24,-.025],[tip,lift,-.11],[side*.21,.19,-.14]],'#e0e6d1');
-          P.poly([[side*.27,.24,-.025],[tip,lift,-.11],[side*.45,lift-.025,-.18]],'#819c99');
-        }
-      }else{
-        for(const side of [-1,1]){
-          P.poly([[side*.075,.22,.07],[side*.103,.17,-.07],[side*.045,.16,-.21]],'#8da7a0');
-          P.box(side*.035,.045,.025,.014,.09,.016,'#a29c74');
-        }
-      }
-    });
-  }
-  function birds(P,env){
-    // Exact peaks of two existing outer shore rocks. The flight remains over
-    // the southwestern water, away from the working/collecting centers.
-    const west=[-11.752,-.154,8.44],east=[14.0613,-.124,6.2384];
-    keep(P,'world:gull-east:'+P.quality,()=>gull(P,...east,2.2));
-    const phase=((env.time||0)+33)%92,flying=P.quality!=='lighter'&&!env.reducedMotion&&phase>=82;
-    if(!flying){keep(P,'world:gull-west:'+P.quality,()=>gull(P,...west,-.35));return;}
-    const u=(phase-82)/10,a=Math.PI*u,b=TAU*u;
-    const x=west[0]-5*Math.sin(a)**2-1.4*Math.sin(b),z=west[2]+4*Math.sin(a)**2+1.1*Math.sin(b);
-    const dx=-5*Math.PI*Math.sin(b)-1.4*TAU*Math.cos(b),dz=4*Math.PI*Math.sin(b)+1.1*TAU*Math.cos(b);
-    gull(P,x,west[1]+.1+Math.sin(a)*(1.7+.25*Math.sin(b)),z,Math.atan2(dx,dz),true,Math.sin(u*TAU*3));
-  }
   G.CloseWorld={draw(P,s,env={}){
     const M=G.CloseModel,C=M.config,H=(x,z)=>M.height(x,z);
     const q=P.quality||'standard';
@@ -372,6 +339,7 @@
     const drift=(s.shore||C.shore).map(d=>d.id+Number(!!d.collected)).join(',');
     keep(P,'world:shore:'+drift+':'+q,()=>shore(P,H,s,C));
     keep(P,'world:seat:'+q,()=>seat(P,H,C));
-    water(P,env);quietDetails(P,H,env);garden(P,H,s,env);birds(P,env);
+    water(P,env);quietDetails(P,H,env);garden(P,H,s,env);
+    if(G.CloseCoast)G.CloseCoast.draw(P,env.coast,env);
   }};
 })(globalThis);

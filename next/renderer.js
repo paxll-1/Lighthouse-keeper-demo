@@ -39,14 +39,37 @@ export function cameraFrame(width, height, target, distance, yaw, pitch) {
   return { eye, forward, right, up, scale: height / (2 * Math.tan(portrait ? .58 : .48)), centerY: height * (portrait ? .53 : height < 500 ? .48 : .52), yaw, pitch, distance };
 }
 
+// Observation changes direction and focal length only. Its eye never orbits a
+// target or advances through scenery, even while yaw/pitch/zoom are changing.
+export function observationFrame(width, height, observation, distance = 20) {
+  const source = observation?.eye;
+  if (!source || source.length !== 3 || ![0, 1, 2].every(k => Number.isFinite(source[k]))) return null;
+  const eye = Array.from(source), yaw = Number.isFinite(observation.yaw) ? observation.yaw : 0;
+  const pitch = clamp(Number.isFinite(observation.pitch) ? observation.pitch : 0, -.15, .55);
+  const opticalZoom = clamp(Number.isFinite(observation.zoom) ? observation.zoom : 2, 1, 3);
+  const cp = Math.cos(pitch), forward = norm([-Math.sin(yaw) * cp, -Math.sin(pitch), -Math.cos(yaw) * cp]);
+  const right = norm(cross(forward, [0, 1, 0])), up = cross(right, forward), portrait = width < height * .82;
+  return { eye, forward, right, up, scale: height / (2 * Math.tan(portrait ? .58 : .48)) * opticalZoom,
+    centerX: Number.isFinite(observation.centerX) ? clamp(observation.centerX, 0, width) : width * .5,
+    centerY: Number.isFinite(observation.centerY) ? clamp(observation.centerY, 0, height) : height * (portrait ? .53 : height < 500 ? .48 : .52),
+    yaw, pitch, distance, opticalZoom, observation: true };
+}
+
+export function lanternState(lantern, quality = 'standard') {
+  const source = lantern?.position, valid = source?.length === 3 && [0, 1, 2].every(k => Number.isFinite(source[k]));
+  return { position: valid ? Array.from(source) : [0, 0, 0],
+    strength: valid && Number.isFinite(lantern.strength) ? clamp(lantern.strength, 0, 1) : 0,
+    radius: quality === 'lighter' ? 3 : 4 };
+}
+
 export function projectPoint(view, width, p) {
   if (!view) return null;
   const d = sub(p, view.eye), z = dot(d, view.forward);
-  return z < NEAR ? null : { x: width * .5 + dot(d, view.right) * view.scale / z, y: view.centerY - dot(d, view.up) * view.scale / z, z };
+  return z < NEAR ? null : { x: (view.centerX ?? width * .5) + dot(d, view.right) * view.scale / z, y: view.centerY - dot(d, view.up) * view.scale / z, z };
 }
 
 function screenRay(view, width, x, y) {
-  const dx = (x - width * .5) / view.scale, dy = -(y - view.centerY) / view.scale;
+  const dx = (x - (view.centerX ?? width * .5)) / view.scale, dy = -(y - view.centerY) / view.scale;
   return [0, 1, 2].map(k => view.forward[k] + view.right[k] * dx + view.up[k] * dy);
 }
 
@@ -111,18 +134,20 @@ in vec4 aColor;
 in vec4 aInfo;
 uniform vec3 uEye, uRight, uUp, uForward;
 uniform vec2 uScale;
-uniform float uShift;
+uniform float uShift, uShiftX;
 out vec4 vColor;
 out vec4 vInfo;
 out float vDepth;
+out vec3 vWorld;
 void main() {
   vec3 d = position - uEye;
   float z = dot(d, uForward);
-  gl_Position = vec4(dot(d, uRight) * uScale.x, dot(d, uUp) * uScale.y + uShift * z,
+  gl_Position = vec4(dot(d, uRight) * uScale.x + uShiftX * z, dot(d, uUp) * uScale.y + uShift * z,
     ${((FAR + NEAR) / (FAR - NEAR)).toFixed(12)} * z - ${((2 * FAR * NEAR) / (FAR - NEAR)).toFixed(12)}, z);
   vColor = aColor;
   vInfo = aInfo;
   vDepth = z;
+  vWorld = position;
 }`;
 
 const FRAGMENT_SHADER = `
@@ -130,8 +155,11 @@ precision highp float;
 in vec4 vColor;
 in vec4 vInfo;
 in float vDepth;
+in vec3 vWorld;
 uniform float uNight, uDistance, uHover, uKeeperTag, uDpr;
 uniform vec3 uFocus;
+uniform vec3 uLanternPosition;
+uniform float uLanternStrength, uLanternRadius;
 out vec4 outputColor;
 void main() {
   if (vColor.a <= 0.001) discard;
@@ -152,6 +180,16 @@ void main() {
     float fog = clamp((vDepth - uDistance - 12.0) / 120.0, 0.0, 0.45);
     vec3 mist = mix(vec3(0.76, 0.83, 0.73), vec3(0.34, 0.47, 0.5), smoothstep(0.35, 0.65, uNight));
     rgb = mix(rgb * light * warm, mist, fog);
+    // A small soft pool, without shadow maps or additional geometry/passes.
+    // Emissive windows/beacon and screen overlays keep their authored light.
+    if (uLanternStrength > 0.0 && vInfo.w < 0.5) {
+      vec3 delta = vWorld - uLanternPosition;
+      float distanceSquared = dot(delta, delta);
+      if (distanceSquared < uLanternRadius * uLanternRadius) {
+        float falloff = 1.0 - smoothstep(0.2, uLanternRadius, sqrt(distanceSquared));
+        rgb += vec3(0.26, 0.17, 0.075) * (uLanternStrength * falloff * falloff);
+      }
+    }
   }
   outputColor = vec4(clamp(rgb, 0.0, 1.0), vColor.a);
 }`;
@@ -298,7 +336,7 @@ export class Renderer {
     this.backend.setPixelRatio(1); this.backend.autoClear = true; this.backend.setClearColor(0x4c9399, 1);
     this.backend.outputColorSpace = THREE.LinearSRGBColorSpace; this.backend.toneMapping = THREE.NoToneMapping;
     this.mode = 'three-webgl2'; this.quality = 'standard'; this.detail = true; this.pixelRatio = 1;
-    this.keeperFocus = null; this.night = this.daylight = 0;
+    this.keeperFocus = this.observation = this.lantern = null; this.night = this.daylight = 0;
     this._width = this._height = 1; this._view = null; this._disposed = this._contextLost = false;
     this._frame = this._staticRebuilds = this._staticVertexCount = 0;
     this._cache = new Map(); this._active = []; this._lastActive = []; this._cachedVertices = 0;
@@ -308,8 +346,9 @@ export class Renderer {
     this._scene = new THREE.Scene(); this._camera = new THREE.Camera();
     this._uniforms = {
       uEye: { value: new THREE.Vector3() }, uRight: { value: new THREE.Vector3(1, 0, 0) }, uUp: { value: new THREE.Vector3(0, 1, 0) }, uForward: { value: new THREE.Vector3(0, 0, -1) },
-      uScale: { value: new THREE.Vector2(1, 1) }, uShift: { value: 0 }, uNight: { value: 0 }, uDistance: { value: 20 }, uHover: { value: 0 },
+      uScale: { value: new THREE.Vector2(1, 1) }, uShift: { value: 0 }, uShiftX: { value: 0 }, uNight: { value: 0 }, uDistance: { value: 20 }, uHover: { value: 0 },
       uKeeperTag: { value: this._tagId('keeper') }, uFocus: { value: new THREE.Vector3(0, 0, -1) }, uDpr: { value: 1 },
+      uLanternPosition: { value: new THREE.Vector3() }, uLanternStrength: { value: 0 }, uLanternRadius: { value: 4 },
     };
     const material = (transparent, overlay = false) => new THREE.RawShaderMaterial({
       glslVersion: THREE.GLSL3, vertexShader: VERTEX_SHADER, fragmentShader: FRAGMENT_SHADER, uniforms: this._uniforms,
@@ -356,10 +395,11 @@ export class Renderer {
 
   camera(target, distance, yaw, pitch) {
     this._cameraArgs = [{ x: target.x, y: target.y, z: target.z }, distance, yaw, pitch];
-    const v = this._view = cameraFrame(this._width, this._height, target, distance, yaw, pitch), u = this._uniforms;
+    const v = this._view = observationFrame(this._width, this._height, this.observation, distance) || cameraFrame(this._width, this._height, target, distance, yaw, pitch), u = this._uniforms;
     u.uEye.value.fromArray(v.eye); u.uRight.value.fromArray(v.right); u.uUp.value.fromArray(v.up); u.uForward.value.fromArray(v.forward);
-    u.uScale.value.set(2 * v.scale / this._width, 2 * v.scale / this._height); u.uShift.value = 1 - 2 * v.centerY / this._height; u.uDistance.value = distance;
-    this._backgroundUniforms.uHorizon.value = v.centerY - Math.tan(pitch) * v.scale; this._backgroundUniforms.uYaw.value = yaw;
+    u.uScale.value.set(2 * v.scale / this._width, 2 * v.scale / this._height);
+    u.uShift.value = 1 - 2 * v.centerY / this._height; u.uShiftX.value = 2 * (v.centerX ?? this._width * .5) / this._width - 1; u.uDistance.value = distance;
+    this._backgroundUniforms.uHorizon.value = v.centerY - Math.tan(v.pitch) * v.scale; this._backgroundUniforms.uYaw.value = v.yaw;
     this.detail = distance < 25 && this.quality !== 'lighter';
   }
   project(p) { return projectPoint(this._view, this._width, p); }
@@ -438,6 +478,9 @@ export class Renderer {
     this._uniforms.uHover.value = this._tagId(hover);
     const focus = this.keeperFocus && this.project(this.keeperFocus);
     this._uniforms.uFocus.value.set(focus?.x || 0, focus ? this._height - focus.y : 0, focus ? focus.z : -1);
+    const lantern = lanternState(this.lantern, this.quality);
+    this._uniforms.uLanternPosition.value.fromArray(lantern.position);
+    this._uniforms.uLanternStrength.value = lantern.strength; this._uniforms.uLanternRadius.value = lantern.radius;
     this._flushed = true;
     // Bound historical state/quality variants. Current chunks stay available.
     if (this._cache.size > MAX_CACHE_CHUNKS || this._cachedVertices > MAX_CACHE_VERTICES) {
@@ -449,7 +492,7 @@ export class Renderer {
   pick(x, y) { return this._view && !this._disposed ? pickFaces(this._selection, this._view.eye, screenRay(this._view, this._width, x, y)) : null; }
 
   _screenWorld(x, y, depth) {
-    const v = this._view, dx = (x-this._width*.5)*depth/v.scale, dy = -(y-v.centerY)*depth/v.scale;
+    const v = this._view, dx = (x-(v.centerX ?? this._width*.5))*depth/v.scale, dy = -(y-v.centerY)*depth/v.scale;
     return [0,1,2].map(k => v.eye[k]+v.forward[k]*depth+v.right[k]*dx+v.up[k]*dy);
   }
   _effect(points, colors) {
@@ -505,7 +548,9 @@ export class Renderer {
   inspect() {
     return { ...this.stats, mode: this.mode, quality: this.quality, width: this._width, height: this._height, pixelRatio: this.pixelRatio,
       canvasWidth: this.canvas.width, canvasHeight: this.canvas.height, context: this.backend.getContext().getParameter(this.backend.getContext().VERSION),
-      view: this._view ? { ...this._view, eye: [...this._view.eye], forward: [...this._view.forward], right: [...this._view.right], up: [...this._view.up] } : null,
+      view: this._view ? { ...this._view, eye: [...this._view.eye], forward: [...this._view.forward], right: [...this._view.right], up: [...this._view.up],
+        opticalZoom: this._view.opticalZoom || 1, observation: !!this._view.observation } : null,
+      lantern: { position: this._uniforms.uLanternPosition.value.toArray(), strength: this._uniforms.uLanternStrength.value, radius: this._uniforms.uLanternRadius.value, shadowRays: false },
       disposed: this._disposed, contextLost: this._contextLost };
   }
 

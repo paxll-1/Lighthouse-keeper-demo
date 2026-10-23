@@ -4,9 +4,9 @@
 <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <meta name="color-scheme" content="light">
 <link rel="icon" href="data:,">
-<meta name="lighthouse-build" content="island-ui-2026-10-23-r1">
+<meta name="lighthouse-build" content="island-bench-2026-10-23-r1">
 <title>Маяк — Остров смотрителя</title>
-<link rel="stylesheet" href="./ui.css">
+<link rel="stylesheet" href="./ui.css?build=island-bench-2026-10-23-r1">
 </head>
 <body>
 <main class="game" id="game" aria-busy="true" data-input="mouse" data-panel="none">
@@ -29,7 +29,18 @@
   <button id="act" type="button" class="action" aria-describedby="context-detail" aria-label="Начать работу" hidden><svg viewBox="0 0 24 24" aria-hidden="true"><path id="action-path"/></svg></button>
   <div class="working" id="working" role="progressbar" aria-label="Работа" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0" hidden><span id="work-progress"></span></div>
 
-  <nav class="controls" aria-label="Камера, справка и меню">
+  <div id="bench-ui" class="bench-ui" data-state="idle" hidden>
+    <button id="bench-select" class="bench-select" type="button" aria-label="Выбрать верстак" aria-controls="bench-prompt" aria-pressed="false" hidden><span class="sr-only">Выбрать верстак</span></button>
+    <div id="bench-prompt" class="bench-prompt" role="group" aria-label="Действие у верстака" hidden>
+      <div class="bench-commands"><button id="bench-confirm" class="bench-confirm primary" type="button" aria-describedby="bench-instruction" hidden>Распилить · 2 доски</button><button id="bench-dismiss" class="bench-dismiss icon-button" type="button" aria-label="Отменить выбор верстака" title="Отменить выбор" hidden><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m6 6 12 12M18 6 6 18"/></svg></button><button id="bench-pause" class="bench-pause" type="button" aria-describedby="bench-work-status" hidden>Пауза</button></div>
+      <div id="bench-notes" class="bench-notes"><p id="bench-instruction" class="bench-instruction" hidden>1 бревно из рук → 2 доски в руках.</p><p id="bench-reason" class="bench-reason" role="status" aria-live="polite" aria-atomic="true" hidden></p></div>
+      <span id="bench-work-status" class="sr-only"></span>
+    </div>
+    <p id="bench-result" class="bench-result" role="status" aria-live="polite" aria-atomic="true" hidden></p>
+  </div>
+
+  <nav class="controls" aria-label="Сумка, полный экран, справка и меню">
+    <button id="bag" type="button" aria-label="Сумка смотрителя" aria-controls="bag-panel" aria-expanded="false" aria-pressed="false" title="Сумка смотрителя"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 7V5a4 4 0 0 1 8 0v2M5 7h14l2 14H3ZM8 11v3m8-3v3"/></svg><span class="sr-only">Сумка смотрителя</span></button>
     <button id="fullscreen" type="button" aria-label="На весь экран" aria-pressed="false" aria-describedby="fullscreen-status" title="На весь экран"><svg viewBox="0 0 24 24" aria-hidden="true"><path id="fullscreen-path" d="M8 3H3v5M16 3h5v5M21 16v5h-5M8 21H3v-5"/></svg><span class="sr-only">Полный экран</span></button>
     <button id="help" type="button" aria-label="Как играть" aria-haspopup="dialog" aria-controls="help-dialog" title="Как играть"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M9.5 9a2.5 2.5 0 0 1 5 0c0 1.8-2.5 1.8-2.5 4M12 17h.01"/></svg><span class="sr-only">Как играть</span></button>
     <button id="more" type="button" aria-label="Меню" aria-controls="menu" aria-expanded="false" title="Меню"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 6h16M4 12h16M4 18h16"/></svg><span class="sr-only">Меню</span></button>
@@ -55,6 +66,23 @@
   <div class="place" id="place" role="status" aria-live="polite"></div>
 
   <div class="bottom-ui bottom" id="bottom-ui">
+    <section class="gear-panel object-panel" id="bag-panel" aria-labelledby="bag-title" hidden>
+      <header class="panel-heading">
+        <div><span class="eyebrow">С собой</span><h2 id="bag-title">Сумка смотрителя</h2></div>
+        <button id="bag-close" type="button" class="icon-button" aria-label="Закрыть сумку" title="Закрыть сумку"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m6 6 12 12M18 6 6 18"/></svg></button>
+      </header>
+      <div class="panel-scroll" id="bag-scroll">
+        <p class="bag-intro" id="bag-status" role="status" aria-live="polite" aria-atomic="true">Инструменты для спокойного осмотра. Груз остаётся с тобой.</p>
+        <div class="gear-commands" role="group" aria-label="Инструменты для прогулки">
+          <div class="gear-command"><button id="gear-lantern" type="button" aria-describedby="gear-lantern-detail"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 5V4a3 3 0 0 1 6 0v1M8 5h8l-1 4 2 10H7L9 9Zm1 4h6M7 22h10M12 12v4"/></svg><span>Взять фонарь</span></button><p id="gear-lantern-detail">Мягкий свет у пояса. Можно спокойно идти дальше.</p></div>
+          <div class="gear-command"><button id="gear-binoculars" type="button" class="primary" aria-describedby="gear-binoculars-detail"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m5 5 4 1 1 10M19 5l-4 1-1 10M10 10h4M3 16 5 5m16 11L19 5"/><circle cx="6" cy="17" r="4"/><circle cx="18" cy="17" r="4"/></svg><span>Смотреть в бинокль</span></button><p id="gear-binoculars-detail">Остановись и рассмотри берег или чаек издали.</p></div>
+        </div>
+        <div class="gear-cargo"><h3 class="section-label">Груз</h3><p id="bag-cargo">Руки свободны</p><p class="gear-note" id="bag-cargo-note">Груз остаётся в руках при осмотре. Сумка приостанавливает работу; сделанная часть сохраняется.</p></div>
+        <section class="bag-coast" id="bag-coast" aria-labelledby="bag-coast-title" hidden><h3 class="section-label" id="bag-coast-title">Куда прогуляться</h3><div class="coast-choices" id="bag-places" role="group" aria-label="Места у берега"></div><p class="gear-note">Можно пройти берег в своём темпе. Спуск и прежний обход остаются на своих местах.</p></section>
+        <p class="gear-key keyboard-only"><kbd>B</kbd> — сумка, <kbd>Esc</kbd> — закрыть.</p>
+      </div>
+    </section>
+
     <section class="shed-panel object-panel" id="shed-panel" aria-labelledby="shed-title" hidden>
       <header class="shed-heading panel-heading">
         <div><span class="eyebrow">У мастерской</span><h2 id="shed-title">Дровяной навес</h2></div>
@@ -81,6 +109,14 @@
 
     <aside class="save" id="save" role="alert" hidden><div class="save-copy"><span class="status-symbol" aria-hidden="true">!</span><span class="save-message" id="save-message">Запись недоступна. Прогресс пока здесь.</span></div><button id="save-dismiss" type="button">Прочитано</button></aside>
   </div>
+  <section class="tool-panel object-panel" id="tool-panel" aria-labelledby="tool-title" data-mode="none" hidden>
+    <header class="panel-heading tool-heading"><div><h2 id="tool-title">Бинокль</h2><p id="tool-status" class="tool-status" role="status" aria-live="polite" aria-atomic="true"></p></div><button id="tool-close" type="button" class="tool-exit" aria-label="Убрать бинокль"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m6 6 12 12M18 6 6 18"/></svg><span id="tool-close-label">Выйти</span></button></header>
+    <div class="panel-scroll tool-scroll" id="tool-scroll">
+      <div id="binocular-controls" class="binocular-controls" role="group" aria-label="Масштаб бинокля"><button id="binocular-minus" type="button" aria-label="Уменьшить приближение" aria-describedby="binocular-zoom"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12h14"/></svg></button><output id="binocular-zoom" class="binocular-zoom" aria-label="Приближение">1×</output><button id="binocular-plus" type="button" aria-label="Увеличить приближение" aria-describedby="binocular-zoom"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12h14M12 5v14"/></svg></button></div>
+      <div id="binocular-coast" class="binocular-coast" hidden><div class="coast-navigation" role="group" aria-label="Направление взгляда"><button id="coast-previous" type="button" class="icon-button" aria-label="Предыдущее место у берега"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m14 5-7 7 7 7"/></svg></button><p id="coast-point" class="coast-point">Берег</p><button id="coast-next" type="button" class="icon-button" aria-label="Следующее место у берега"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m10 5 7 7-7 7"/></svg></button></div><div class="coast-choices" id="binocular-points" role="group" aria-label="Посмотреть на место у берега"></div></div>
+      <p class="gear-note" id="binocular-hint">Веди по экрану, чтобы осмотреться. Два пальца или колесо меняют приближение. Груз остаётся с тобой.<span class="keyboard-only"> Стрелки или <kbd>WASD</kbd> — взгляд, <kbd>−</kbd>/<kbd>+</kbd> — масштаб, <kbd>Esc</kbd> — выйти.</span></p>
+    </div>
+  </section>
   <p class="screen-status feedback" id="fullscreen-status" role="status" aria-live="polite"></p>
   <div class="toast feedback" id="toast" role="status" aria-live="polite"></div>
 </main>
@@ -92,15 +128,16 @@
     <section class="help-section"><h3>Подойди и выбери дело</h3><p>Нажми на землю или предмет — смотритель подойдёт. Карточка предложит действие: нажми её кнопку или значок у предмета<span class="keyboard-only">; клавиша <kbd>E</kbd> делает то же самое</span>.</p><p>«Пауза» останавливает работу, «Стоп» — путь. Можно также нажать на землю<span class="keyboard-only"> или <kbd>Esc</kbd></span>. Сделанная часть работы сохраняется. Причина недоступности написана в карточке: это могут быть материалы, занятые руки или заполненный навес.</p></section>
     <section class="help-section"><h3>От бревна к целой ступени</h3><p>Сруби дерево в роще или подбери плавник на берегу. Подними бревно в свободные руки, распили у верстака и принеси две доски к ступени дома. Смотритель работает сам после команды — ловить момент нажатия не нужно.</p><p>К берегу ведёт обход справа от каменной кромки. По желанию почини спуск: он откроет короткий путь к берегу и старому причалу. После ремонта дома можно зажечь маяк.</p></section>
     <section class="help-section"><h3>Запасы и руки</h3><p>Навес — крытая поленница у правого края мастерской. Подойди к ней и открой команды кнопкой в карточке или значком. «Сложить» убирает груз под крышу; «Взять бревно» и «Взять доски» кладут выбранный материал в руки.</p><p>Можно нести одно бревно или до двух досок. Неполный груз досок можно дополнить. При полном отсеке остаток останется в руках. Запас под крышей сначала возьми в руки: он не расходуется на расстоянии. Материал в руках можно нести прямо к верстаку или ремонту.</p><p>Улучшение стоит две доски из навеса и расширяет оба отсека. Перекладывание не расходует день; путь и работа занимают время.</p></section>
+    <section class="help-section"><h3>Берег и сумка</h3><p>Кнопка сумки открывает фонарь и бинокль<span class="keyboard-only">; клавиша <kbd>B</kbd> делает то же самое</span>. Работа приостанавливается, сделанная часть и груз сохраняются. Фонарь светит у пояса во время прогулки. Бинокль приближает вид с места, где стоит смотритель.</p><p>Приближай кнопками «−» и «+», двумя пальцами или колесом. Выбери названное место, чтобы направить взгляд без точного прицеливания. «Выйти» убирает бинокль и возвращает прежний вид<span class="keyboard-only">; <kbd>Esc</kbd> тоже закрывает инструмент, стрелки или <kbd>WASD</kbd> поворачивают взгляд, клавиши <kbd>−</kbd>/<kbd>+</kbd> меняют масштаб</span>.</p><p>На берегу можно спокойно смотреть на чаек. При близком подходе они взлетают, а спустя тихую паузу возвращаются.</p></section>
     <details class="help-detail"><summary>Камера и полный экран</summary><p>Веди пальцем или мышью в сторону для поворота, вверх и вниз — для наклона. Два пальца или колесо мыши меняют масштаб. Кнопка карты показывает весь остров, кнопка с точкой возвращает камеру к смотрителю.</p><p>Кнопка с четырьмя углами включает полный экран, если браузер это разрешает. Системные панели могут остаться. Для выхода нажми ту же кнопку<span class="keyboard-only"> или <kbd>Esc</kbd></span>.</p></details>
     <details class="help-detail"><summary>Прогресс и настройки</summary><p>Эта проба хранит свой прогресс отдельно. Старое сохранение на том же адресе браузера переносится один раз без изменения прежней игры; запасы сверх вместимости сохраняются. После переноса версии продолжаются независимо. Если запись недоступна, появится предупреждение.</p><p>В меню можно уменьшить движение травы, крон, дыма и воды. Изначально учитывается настройка системы. Качество «Легче» сокращает декоративные детали и разрешение. «Показать плавность» выводит текущие FPS и время кадра — ориентир для этого устройства.</p></details>
-    <details class="help-detail keyboard-only"><summary>Клавиши</summary><p>Стрелки или <kbd>WASD</kbd> — ходьба, <kbd>E</kbd> — действие, <kbd>Esc</kbd> — остановка, <kbd>M</kbd> — весь остров, <kbd>F</kbd> — к смотрителю.</p></details>
+    <details class="help-detail keyboard-only"><summary>Клавиши</summary><p>Стрелки или <kbd>WASD</kbd> — ходьба, <kbd>E</kbd> — действие, <kbd>B</kbd> — сумка, <kbd>Esc</kbd> — остановка или выход из осмотра, <kbd>M</kbd> — весь остров, <kbd>F</kbd> — к смотрителю.</p></details>
   </div>
   <div class="dialog-actions"><button id="help-close" class="primary" type="button">Вернуться на остров</button></div>
 </dialog>
 <dialog id="restart-dialog" class="confirm-dialog" aria-labelledby="restart-title"><div class="dialog-content"><span class="eyebrow">Новое начало</span><h2 id="restart-title">Начать это утро заново?</h2><p>Ремонт и припасы этой пробы будут заменены начальным состоянием.</p></div><div class="dialog-actions"><button id="restart-cancel" type="button">Остаться здесь</button><button id="restart-confirm" class="primary" type="button">Начать заново</button></div></dialog>
 
 <section id="boot-status" class="boot-status" role="status" aria-live="polite"><svg class="boot-mark" viewBox="0 0 48 48" aria-hidden="true"><path d="m18 38 2-23h8l2 23M16 38h16M19 15h10M21 15V9h6v6M18 9l6-4 6 4M8 12l6 2m20 0 6-2M6 23l8-2m20 0 8 2"/></svg><h1>Остров смотрителя</h1><p id="boot-message">Готовим остров…</p><a id="legacy-link" href="./legacy/index.html" hidden>Открыть прежнюю демку</a></section>
-<script type="module" src="./bootstrap.js"></script>
+<script type="module" src="./bootstrap.js?build=island-bench-2026-10-23-r1"></script>
 </body>
 </html>

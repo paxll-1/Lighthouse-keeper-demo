@@ -259,6 +259,15 @@
       stockCount(P,5.526,1.48,-3.555,amount);
     });
   }
+  function restingSaw(P,env){
+    if(env.work?.id==='saw')return;
+    keep(P,'scene:resting-handsaw:'+P.quality,()=>P.tag('bench',()=>{
+      // One familiar tool on the existing rear edge; no tray or new inventory.
+      P.poly([[3.59,1.13,-1.92],[4.39,1.13,-1.92],[4.5,1.43,-1.92],[3.68,1.35,-1.92]],'#a5b7ac');
+      for(let i=0;i<4;i++){const x=3.61+i*.18;P.poly([[x,1.13,-1.91],[x+.09,1.1,-1.91],[x+.18,1.13,-1.91]],'#687d78');}
+      P.group({x:4.5,y:1.38,z:-1.92,rz:-.22},()=>{P.box(0,0,0,.21,.3,.09,'#8f704b');P.box(0,.01,.05,.08,.14,.012,'#56736b');});
+    }));
+  }
   function benchWork(P,env){
     if(env.work?.id!=='saw')return;
     P.tag('bench',()=>{
@@ -400,7 +409,7 @@
     keep(P,'scene:shed-logs:'+level+':'+s.logs+':'+q,()=>shedLogs(P,s.logs,level));
     keep(P,'scene:shed-boards:'+level+':'+s.boards+':'+q,()=>shedBoards(P,s.boards,level));
     keep(P,'scene:lighthouse:'+q,()=>lighthouse(P));
-    houseSmoke(P,env);benchWork(P,env);lantern(P,env);
+    houseSmoke(P,env);restingSaw(P,env);benchWork(P,env);lantern(P,env);
     (s.trees||[]).forEach((t,i)=>{
       const flags=Number(!!t.felled)+':'+Number(!!t.collected);
       keep(P,'scene:tree-ground:'+t.id+':'+Number(!!t.felled)+':'+q,()=>treeGround(P,t));
