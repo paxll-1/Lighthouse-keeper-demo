@@ -1,6 +1,6 @@
 // Start the game owner only after the renderer can create WebGL2. The storage
 // experiment keeps a separate save branch; unsupported browsers touch neither.
-const BUILD = 'island-next-2026-10-22-r1';
+const BUILD = 'island-ui-2026-10-23-r1';
 globalThis.ThreeIslandPreview = { build: BUILD, ready: false, error: null };
 const status = document.getElementById('boot-status');
 function failed(error) {
@@ -18,6 +18,8 @@ try {
   await import('./renderer.js');
   await import('./world.js');
   await import('./scene.js');
+  await import('./ui.js');
+  await import('./interface.js');
   await import('./app.js');
   if (!globalThis.CloseDemo) throw new Error('Game startup did not complete');
   ThreeIslandPreview.ready = true;

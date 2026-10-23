@@ -4,82 +4,103 @@
 <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <meta name="color-scheme" content="light">
 <link rel="icon" href="data:,">
-<meta name="lighthouse-build" content="island-next-2026-10-22-r1">
-<title>Маяк — навес и переноска · пробная версия</title>
-<style>
-:root{font-family:system-ui,-apple-system,"Segoe UI",sans-serif;color:#29423c;background:#c4d1c2;font-synthesis:none}
-*{box-sizing:border-box}html,body{margin:0;width:100%;height:100%;overflow:hidden;overscroll-behavior:none}button{font:inherit;touch-action:manipulation;cursor:pointer}button:focus-visible,canvas:focus-visible{outline:3px solid #bd8c48;outline-offset:-3px}button svg{pointer-events:none;width:19px;height:19px;stroke:currentColor;fill:none;stroke-width:1.6;vertical-align:middle}
-.game{--safe-top:env(safe-area-inset-top,0px);--safe-right:env(safe-area-inset-right,0px);--safe-bottom:env(safe-area-inset-bottom,0px);--safe-left:env(safe-area-inset-left,0px);position:relative;width:100%;height:100vh;height:100dvh;overflow:hidden;background:#9dbab1;isolation:isolate}
-canvas{display:block;width:100%;height:100%;touch-action:none;cursor:crosshair;outline:none}
-.hud{position:absolute;z-index:2;top:18px;left:20px;max-width:235px;pointer-events:none}
-.brand{font:19px Georgia,serif;text-shadow:0 1px 10px #f9f6db80;letter-spacing:-.3px}
-.objective{margin-top:12px;padding:10px 13px;border:1px solid #e2e2c9b0;border-radius:10px;background:#faf6e5dc}.objective strong{display:block;font:16px Georgia,serif;font-weight:400}.objective.done{border-color:#afbc90;background:#edf3dce0}.goal-next{font-size:10px;line-height:1.5;color:#617465;margin-top:4px;max-width:210px}
-.inventory{display:flex;gap:12px;margin-top:6px;font-size:10px;font-variant-numeric:tabular-nums;align-items:center;color:#627367}.inventory b{font-size:12px;font-weight:500;margin-right:3px;color:#355344}.inventory span{white-space:nowrap}.day{font-size:10px;color:#5d7165;margin-top:6px;display:flex;align-items:center;gap:6px}.day:before{content:"";width:7px;height:7px;border-radius:50%;background:#d7ab61}
-.controls{position:absolute;right:18px;top:16px;z-index:4;display:flex;gap:7px}.controls button{width:44px;height:44px;padding:10px;border:1px solid #e3e2ccc4;border-radius:12px;background:#f8f6e4ed;color:#466153;box-shadow:0 2px 8px #31483b0c}.controls button:hover{background:#fff9e5}.controls button[aria-pressed=true],.controls button[aria-expanded=true]{background:#e2ebd0;border-color:#8d9d75}.controls svg{width:22px;height:22px}
-.menu{position:absolute;right:18px;top:68px;z-index:5;display:grid;gap:3px;padding:7px;border:1px solid #d1d7bf;border-radius:12px;background:#f8f5e6f7;box-shadow:0 8px 24px #193b3520}.menu[hidden]{display:none}.menu button{display:flex;align-items:center;gap:9px;text-align:left;border:0;border-radius:7px;background:transparent;color:#355344;font-size:12px;min-height:44px;padding:10px 12px}.menu button:hover{background:#e9eddb}.menu svg{width:18px;height:18px}.performance-panel{position:absolute;z-index:3;right:calc(14px + var(--safe-right));top:calc(166px + var(--safe-top));padding:8px 10px;border-radius:9px;background:#faf6e5ed;color:#355344;font:10px/1.6 ui-monospace,monospace;pointer-events:none;white-space:pre-line}.performance-panel[hidden]{display:none}.place{position:absolute;bottom:28px;left:20px;z-index:2;font:13px Georgia,serif;color:#355344;background:#faf6e5c9;padding:7px 11px;border-radius:8px;opacity:0;transition:opacity .4s;pointer-events:none}.place.visible{opacity:1}
-.action{position:absolute;z-index:3;width:44px;height:44px;padding:9px;display:grid;place-items:center;border:1px solid #c4cdb4;border-radius:50%;background:#fcf8e9ed;color:#355344;box-shadow:0 2px 8px #31483b26;transform:translate(-50%,-50%);touch-action:manipulation}.action svg{width:24px;height:24px;stroke-width:1.6;stroke-linecap:round;stroke-linejoin:round}.action:hover{background:#fffbee;border-color:#8d9d75}.action[hidden],.working[hidden]{display:none}
-.action[aria-disabled=true]{opacity:.6;border-style:dashed}
-.working{position:absolute;z-index:3;width:72px;height:3px;border-radius:3px;background:#f7f3dfb3;box-shadow:0 0 0 1px #65764a33;overflow:hidden;pointer-events:none;transform:translate(-50%,-100%)}.working span{display:block;height:100%;background:#94783d}
-.save{position:absolute;bottom:8px;left:25px;font-size:9px;letter-spacing:.015em;color:#4b6b5ca6;pointer-events:none}.save.error{background:#fff0d8f5;border:1px solid #cbb27e;padding:8px 12px;bottom:80px;border-radius:8px;color:#795c30;font-size:11px;max-width:340px}
-.toast{position:absolute;left:24px;bottom:34px;z-index:6;background:#faf6e5ed;color:#355344;padding:8px 11px;border-radius:8px;font-size:11px;line-height:1.5;opacity:0;transition:opacity .2s;pointer-events:none;max-width:270px}.toast.visible{opacity:1}
-dialog{border:1px solid #d1d7bf;border-radius:15px;padding:26px;max-width:445px;width:calc(100% - 30px);background:#f8f5e6;color:#344e40;box-shadow:0 20px 70px #193b3533}dialog::backdrop{background:#1c383c55;backdrop-filter:blur(3px)}dialog h2{font:28px Georgia,serif;margin:0 0 14px}dialog p{font-size:13px;line-height:1.8;margin:10px 0;color:#5e7265}dialog button{border:1px solid #c3ccb0;border-radius:7px;background:#e8edda;color:#35533f;font-size:12px;padding:11px 15px;margin:10px 5px 0 0}dialog .primary{background:#406b52;color:#fff9e7;border-color:#406b52}
-/* UI stays inside the browser's available viewport, including notched screens. */
-.hud{top:calc(16px + var(--safe-top));left:calc(16px + var(--safe-left));max-width:min(235px,calc(100% - 136px - var(--safe-left) - var(--safe-right)))}
-.controls{top:calc(14px + var(--safe-top));right:calc(14px + var(--safe-right))}.menu{top:calc(66px + var(--safe-top));right:calc(14px + var(--safe-right));max-height:calc(100% - 86px - var(--safe-top) - var(--safe-bottom));overflow:auto}
-.bottom-ui{position:absolute;z-index:4;left:calc(14px + var(--safe-left));right:calc(14px + var(--safe-right));bottom:calc(8px + var(--safe-bottom));display:grid;gap:6px;max-width:420px;pointer-events:none}
-.context{display:grid;grid-template-columns:1fr auto;align-items:center;gap:10px;padding:10px 12px;border:1px solid #e4e0c9;border-radius:12px;background:#faf6e5ed;box-shadow:0 3px 15px #31483b12}.context strong{font-size:12px;font-weight:600;display:block}.context p{margin:3px 0 0;font-size:11px;line-height:1.45;color:#617465}.context button{pointer-events:auto;min-height:44px;min-width:58px;padding:9px;border:1px solid #aab79b;border-radius:9px;background:#e6ebd6;color:#355344;font-size:12px}.context button[hidden]{display:none}
-.save,.save.error{position:static;font-size:9px;max-width:none;margin:0}.save{color:#355344;text-shadow:0 1px 3px #faf6e5}.save.error{padding:8px 10px;font-size:11px;text-shadow:none}.screen-status{margin:0;padding:8px 10px;border-radius:8px;background:#faf6e5f2;font-size:11px;line-height:1.4;color:#355344}.screen-status:empty{display:none}
-.toast{bottom:calc(var(--status-height,110px) + 20px + var(--safe-bottom));left:calc(14px + var(--safe-left));max-width:min(340px,calc(100% - 28px - var(--safe-left) - var(--safe-right)))}.place{bottom:calc(var(--status-height,110px) + 20px + var(--safe-bottom));left:calc(14px + var(--safe-left))}.action{width:48px;height:48px;border-width:2px}.action[aria-disabled=true]{opacity:.8}.working{height:5px;width:86px;background:#f7f3dfed}.working span{background:#637f4b}
-dialog{max-height:calc(100dvh - 28px - env(safe-area-inset-top,0px) - env(safe-area-inset-bottom,0px));overflow:auto}html:fullscreen,html:-webkit-full-screen{background:#9dbab1}
-@media(max-width:700px){.brand{font-size:17px}.controls{display:grid;grid-template-columns:44px 44px;gap:6px}.menu{top:calc(116px + var(--safe-top))}.objective{padding:9px 11px;margin-top:10px}.objective strong{font-size:15px}.inventory{gap:8px;font-size:10px}.goal-next{font-size:10px}.day{margin-top:5px}}
-@media(max-width:360px){.hud{left:calc(10px + var(--safe-left));max-width:calc(100% - 124px - var(--safe-left) - var(--safe-right))}.brand{font-size:15px}.objective{padding:8px}.objective strong{font-size:14px}.inventory{gap:7px}.controls{right:calc(10px + var(--safe-right))}.bottom-ui{left:calc(10px + var(--safe-left));right:calc(10px + var(--safe-right))}}
-@media(max-height:500px){.hud{top:calc(10px + var(--safe-top));left:calc(12px + var(--safe-left));max-width:215px}.brand,.day{display:none}.objective{margin-top:0;padding:8px 11px}.controls{top:calc(10px + var(--safe-top));display:flex;gap:6px}.menu{top:calc(62px + var(--safe-top))}.performance-panel{top:calc(66px + var(--safe-top))}.bottom-ui{max-width:355px}.context{padding:7px 10px}.context p{font-size:10px}.context strong{font-size:11px}dialog{padding:18px}dialog h2{font-size:24px}}
-@media(prefers-reduced-motion:reduce){*{transition:none!important;scroll-behavior:auto!important}}
-
-.stock-label{margin-top:7px;font-size:10px;color:#617465}.cargo{margin-top:5px;font-size:11px;font-weight:600;color:#355344}.inventory{flex-wrap:wrap;gap:3px 10px}
-.shed-panel{pointer-events:auto;max-height:min(48dvh,310px);overflow:auto;overscroll-behavior:contain;padding:10px 12px;border:1px solid #b9c6a7;border-radius:12px;background:#faf6e5f5;color:#355344;box-shadow:0 3px 15px #31483b18}.shed-panel[hidden]{display:none}.shed-heading{display:flex;align-items:center;justify-content:space-between;gap:12px}.shed-heading h2{font:19px Georgia,serif;margin:0}.shed-panel button{min-height:44px;min-width:44px;padding:8px 10px;border:1px solid #aab79b;border-radius:8px;background:#e6ebd6;color:#355344;font-size:12px}.shed-heading button{font-size:20px;padding:4px 10px}.shed-panel button[aria-disabled=true]{background:#efeee2;color:#6d7563;border-style:dashed}.shed-stock{display:flex;flex-wrap:wrap;gap:4px 18px;margin:7px 0;font-size:12px;font-variant-numeric:tabular-nums}.shed-carry{font-size:11px;margin:4px 0 8px}.shed-commands{display:grid;grid-template-columns:1fr 1fr;gap:8px}.shed-command{display:grid;align-content:start;gap:4px}.shed-command small{font-size:10px;line-height:1.4;color:#617465}.shed-command button{width:100%;text-align:left}.shed-note{font-size:10px;line-height:1.4;margin:9px 0 0;color:#617465}
-@media(max-height:500px){.shed-panel{max-height:48dvh;padding:7px 10px}.shed-heading h2{font-size:17px}.shed-stock{margin:3px 0}.shed-carry{margin:3px 0}.shed-commands{gap:5px}.shed-command small{font-size:10px}}
-
-.boot-status{position:fixed;inset:0;z-index:30;display:grid;place-content:center;gap:16px;padding:32px max(24px,env(safe-area-inset-left));background:#d9ded0;color:#29423c;max-width:100%;text-align:center}.boot-status[hidden]{display:none}.boot-status h1{font:30px Georgia,serif;margin:0}.boot-status p{max-width:520px;margin:0 auto;line-height:1.5}.boot-status a{color:#244a55;text-decoration:underline;text-underline-offset:4px;padding:12px;min-height:44px}.boot-status a[hidden]{display:none}
-</style>
+<meta name="lighthouse-build" content="island-ui-2026-10-23-r1">
+<title>Маяк — Остров смотрителя</title>
+<link rel="stylesheet" href="./ui.css">
 </head>
 <body>
-<main class="game" id="game" aria-busy="true">
-<canvas id="world" tabindex="0" role="application" aria-label="Остров смотрителя. Нажми на землю или предмет, чтобы подойти. Значок рядом или E — начать. Веди пальцем для поворота и наклона камеры, два пальца — масштаб. Стрелки — идти, Escape — остановиться, M — общий вид, F — вернуть камеру."></canvas>
-<div class="hud"><div><div class="brand">Остров смотрителя</div><div id="day" class="day">Утро у моря</div></div><div class="objective" id="objective"><strong id="goal-title">Починить ступень у дома</strong><div class="goal-next" id="goal-next">Древесина: роща или берег</div><div class="stock-label">В навесе</div><div class="inventory" aria-label="Запасы навеса: количество и вместимость"><span><b id="logs">0/4</b> брёвна</span><span><b id="boards">0/8</b> доски</span></div><div class="cargo" id="carry" aria-label="Груз смотрителя">Руки свободны</div></div></div>
-<button id="act" type="button" class="action" aria-describedby="context" aria-label="Начать работу" hidden><svg viewBox="0 0 24 24" aria-hidden="true"><path id="action-path"/></svg></button>
-<div class="working" id="working" role="progressbar" aria-label="Работа" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0" hidden><span id="work-progress"></span></div>
-<nav class="controls" aria-label="Вид и меню">
-<button id="overview" type="button" aria-label="Общий вид острова" aria-pressed="false" title="Весь остров (M)"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m3 5 6-2 6 2 6-2v16l-6 2-6-2-6 2ZM9 3v16M15 5v16"/></svg></button>
-<button id="focus" type="button" aria-label="Вернуть камеру к смотрителю" title="К смотрителю (F)"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 9V3h6M15 3h6v6M21 15v6h-6M9 21H3v-6"/><circle cx="12" cy="12" r="3"/></svg></button>
-<button id="fullscreen" type="button" aria-label="На весь экран" aria-pressed="false" aria-describedby="fullscreen-status" title="На весь экран"><svg viewBox="0 0 24 24" aria-hidden="true"><path id="fullscreen-path" d="M8 3H3v5M16 3h5v5M21 16v5h-5M8 21H3v-5"/></svg></button>
-<button id="more" type="button" aria-label="Меню" aria-controls="menu" aria-expanded="false" title="Меню"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 6h16M4 12h16M4 18h16"/></svg></button>
-</nav>
-<div class="menu" id="menu" hidden aria-label="Настройки острова"><button id="sound" type="button" aria-pressed="false" aria-label="Выключить звук">Звук вкл.</button><button id="motion" type="button" aria-pressed="false">Меньше движения: выкл.</button><button id="quality" type="button" data-quality="standard" aria-pressed="false">Качество: стандарт</button><button id="performance-toggle" type="button" aria-pressed="false" aria-controls="performance-panel">Показать плавность</button><button id="help" type="button">Как играть</button><button id="restart" type="button">Начать заново</button></div>
-<output id="performance-panel" class="performance-panel" aria-live="off" aria-label="Плавность игры. FPS и время кадра, не замер GPU." hidden></output>
-<div class="place" id="place" role="status" aria-live="polite"></div>
-<div class="bottom-ui" id="bottom-ui">
-<section class="shed-panel" id="shed-panel" aria-labelledby="shed-title" hidden>
-<div class="shed-heading"><h2 id="shed-title">Дровяной навес</h2><button id="shed-close" type="button" aria-label="Закрыть команды навеса">×</button></div>
-<div class="shed-stock"><span>Брёвна <b id="shed-logs">0 / 4</b></span><span>Доски <b id="shed-boards">0 / 8</b></span></div>
-<p class="shed-carry" id="shed-carry">Руки свободны</p>
-<div class="shed-commands">
-<div class="shed-command"><button id="shed-store" type="button" aria-describedby="shed-store-reason">Сложить</button><small id="shed-store-reason"></small></div>
-<div class="shed-command"><button id="shed-take-logs" type="button" aria-describedby="shed-take-logs-reason">Взять бревно</button><small id="shed-take-logs-reason"></small></div>
-<div class="shed-command"><button id="shed-take-boards" type="button" aria-describedby="shed-take-boards-reason">Взять доски</button><small id="shed-take-boards-reason"></small></div>
-<div class="shed-command"><button id="shed-upgrade" type="button" aria-describedby="shed-upgrade-reason">Улучшить</button><small id="shed-upgrade-reason"></small></div>
-</div><p class="shed-note">Один груз: бревно или две доски. Перекладывание не расходует день; путь до навеса занимает время.</p>
-</section>
-<div class="context"><div id="context" role="status" aria-live="polite" aria-atomic="true"><strong id="context-title">Найди древесину</strong><p id="context-detail">Нажми на дерево или плавник у берега — смотритель подойдёт.</p></div><button id="pause-work" type="button" hidden>Пауза</button></div>
-<p class="screen-status" id="fullscreen-status" role="status" aria-live="polite"></p>
-<div class="save" id="save" role="status" aria-live="polite">Сохраняется в этом просмотрщике</div>
-</div>
-<div class="toast" id="toast" role="status" aria-live="polite"></div>
-</main>
-<dialog id="help-dialog"><h2>Остров в твоём темпе</h2><p>Камера: веди пальцем или мышью в сторону для поворота, вверх и вниз для наклона. Два пальца или колесо мыши меняют масштаб. Карта сверху показывает весь остров; кнопка с точкой возвращает камеру к смотрителю. Кнопка с четырьмя углами включает полный экран, если браузер и просмотрщик это разрешают. Системные панели могут остаться; выход — та же кнопка или Escape.</p><p>Нажми на предмет — смотритель подойдёт и остановится. Маленький значок рядом или E начинает работу. Кнопка «Пауза», Escape или нажатие на землю прерывают дело; сделанная часть сохраняется. Бледный значок означает, что нужны материалы: нажми, чтобы узнать какие.</p><p>Для ступени у дома нужны доски. Древесину можно срубить в роще или подобрать на берегу. Смотритель рубит и пилит сам после команды: следи за инструментом и полоской работы, особые моменты нажатия ловить не нужно. К берегу ведёт обход справа от каменной кромки. Подними бревно в свободные руки, распили его у верстака и принеси две доски к ступени у дома.</p><p>Навес — крытая поленница у правого края мастерской. Нажми на неё, подойди и открой команды значком или E. «Сложить» переносит груз из рук в соответствующий штабель; «Взять бревно» и «Взять доски» задают материал явно. Можно нести одно бревно или до двух досок; неполный груз досок можно дополнить там же. При полном отсеке остаток остаётся в руках, а неподобранная древесина — в мире. «Улучшить» расходует две доски из навеса и расширяет оба отсека. Ресурсы под крышей не используются верстаком и ремонтом на расстоянии.</p><p>Эта проба хранит свой прогресс отдельно. Старое сохранение на том же адресе браузера переносится один раз, без изменения прежней игры; превышающие вместимость запасы сохраняются. После переноса версии продолжаются независимо.</p><p>По желанию восстанови спуск: он откроет короткий путь к берегу и старому причалу. На видовой площадке слева можно присесть и посмотреть на море. После ремонта дома можно зажечь маяк.</p><p>В меню можно уменьшить движение травы, крон, дыма и воды. Изначально учитывается настройка системы. «Качество: легче» сокращает декоративные детали и разрешение; «Показать плавность» выводит текущие FPS и время кадра. Это ориентир для этого устройства, а не обещание постоянной частоты кадров.</p><p>Клавиатура: стрелки или WASD — ходьба, E — действие, Escape — остановка, M — общий вид, F — вернуть камеру. Пока смотритель стоит или отдыхает, день не проходит.</p><button id="help-close" class="primary" type="button">Вернуться на остров</button></dialog>
-<dialog id="restart-dialog"><h2>Начать это утро заново?</h2><p>Ремонт и припасы этой пробы будут заменены начальным состоянием.</p><button id="restart-confirm" class="primary" type="button">Начать заново</button><button id="restart-cancel" type="button">Остаться здесь</button></dialog>
+<main class="game" id="game" aria-busy="true" data-input="mouse" data-panel="none">
+  <canvas id="world" tabindex="0" role="application" aria-label="Остров смотрителя. Нажми на землю или предмет, чтобы подойти, затем выбери действие в карточке. Веди пальцем для поворота и наклона камеры, два пальца — масштаб. Управление и клавиши описаны в справке."></canvas>
 
-<section id="boot-status" class="boot-status" role="status" aria-live="polite"><h1>Остров смотрителя</h1><p id="boot-message">Готовим остров…</p><a id="legacy-link" href="./legacy/index.html" hidden>Открыть прежнюю демку</a></section>
+  <section class="hud" aria-label="Состояние острова">
+    <div class="state-heading"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="4"/><path d="M12 2v2m0 16v2M2 12h2m16 0h2M5 5l1.5 1.5m11 11L19 19M5 19l1.5-1.5m11-11L19 5"/></svg><div id="day" class="day">Утро у моря</div></div>
+    <div class="objective" id="objective">
+      <strong id="goal-title">Починить ступень</strong>
+      <span class="goal-next" id="goal-next" hidden>Древесина: роща или берег</span>
+      <div class="stock-label sr-only">В навесе</div>
+      <div class="inventory" aria-label="Запасы навеса: количество и вместимость">
+        <span><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m7 19 10-13M4 15 14 3c2-2 7 3 5 5L9 21M4 15c-2 2 3 8 5 6s-3-8-5-6Z"/></svg>Брёвна: <b id="logs">0/4</b></span>
+        <span><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m3 15 11-11 7 5-11 11ZM3 15v4l7 3v-2M10 22 21 11V9M7 14l8-8"/></svg>Доски: <b id="boards">0/8</b></span>
+      </div>
+      <div class="cargo" id="carry" aria-label="Груз смотрителя">Руки свободны</div>
+    </div>
+  </section>
+
+  <button id="act" type="button" class="action" aria-describedby="context-detail" aria-label="Начать работу" hidden><svg viewBox="0 0 24 24" aria-hidden="true"><path id="action-path"/></svg></button>
+  <div class="working" id="working" role="progressbar" aria-label="Работа" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0" hidden><span id="work-progress"></span></div>
+
+  <nav class="controls" aria-label="Камера, справка и меню">
+    <button id="fullscreen" type="button" aria-label="На весь экран" aria-pressed="false" aria-describedby="fullscreen-status" title="На весь экран"><svg viewBox="0 0 24 24" aria-hidden="true"><path id="fullscreen-path" d="M8 3H3v5M16 3h5v5M21 16v5h-5M8 21H3v-5"/></svg><span class="sr-only">Полный экран</span></button>
+    <button id="help" type="button" aria-label="Как играть" aria-haspopup="dialog" aria-controls="help-dialog" title="Как играть"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M9.5 9a2.5 2.5 0 0 1 5 0c0 1.8-2.5 1.8-2.5 4M12 17h.01"/></svg><span class="sr-only">Как играть</span></button>
+    <button id="more" type="button" aria-label="Меню" aria-controls="menu" aria-expanded="false" title="Меню"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 6h16M4 12h16M4 18h16"/></svg><span class="sr-only">Меню</span></button>
+  </nav>
+
+  <section class="menu" id="menu" hidden aria-labelledby="menu-title">
+    <div class="menu-heading"><span class="eyebrow">Меню</span><h2 id="menu-title">Остров смотрителя</h2><p>Можно никуда не спешить.</p></div>
+    <div class="panel-scroll menu-scroll" id="menu-scroll">
+    <div class="menu-camera" role="group" aria-label="Камера">
+    <button id="overview" type="button" aria-label="Общий вид острова" aria-pressed="false" title="Весь остров"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m3 5 6-2 6 2 6-2v16l-6 2-6-2-6 2ZM9 3v16M15 5v16"/></svg><span class="menu-command-label">Весь остров</span></button>
+    <button id="focus" type="button" aria-label="Вернуть камеру к смотрителю" title="К смотрителю"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 9V3h6M15 3h6v6M21 15v6h-6M9 21H3v-6"/><circle cx="12" cy="12" r="3"/></svg><span class="menu-command-label">К смотрителю</span></button>
+    </div>
+    <div class="menu-options" role="group" aria-label="Настройки">
+      <button id="sound" type="button" aria-pressed="false" aria-label="Выключить звук">Звук вкл.</button>
+      <button id="motion" type="button" aria-pressed="false">Меньше движения: выкл.</button>
+      <button id="quality" type="button" data-quality="standard" aria-pressed="false">Качество: стандарт</button>
+      <button id="performance-toggle" type="button" aria-pressed="false" aria-controls="performance-panel">Показать плавность</button>
+    </div>
+    <button id="restart" type="button" class="quiet-danger" aria-haspopup="dialog" aria-controls="restart-dialog">Начать заново</button>
+    </div>
+  </section>
+  <output id="performance-panel" class="performance-panel" aria-live="off" aria-label="Плавность игры. FPS и время кадра, не замер GPU." hidden></output>
+  <div class="place" id="place" role="status" aria-live="polite"></div>
+
+  <div class="bottom-ui bottom" id="bottom-ui">
+    <section class="shed-panel object-panel" id="shed-panel" aria-labelledby="shed-title" hidden>
+      <header class="shed-heading panel-heading">
+        <div><span class="eyebrow">У мастерской</span><h2 id="shed-title">Дровяной навес</h2></div>
+        <div class="panel-controls"><button id="shed-pause" type="button" aria-label="Приостановить работу" hidden>Пауза</button><button id="shed-close" type="button" class="icon-button" aria-label="Закрыть команды навеса" title="Закрыть навес"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m6 6 12 12M18 6 6 18"/></svg></button></div>
+      </header>
+      <div class="panel-scroll" id="shed-scroll">
+      <div id="shed-stocks" class="shed-stocks"><h3 class="section-label">Под крышей</h3><div class="shed-stock"><span>Брёвна <b id="shed-logs">0 из 4</b></span><span>Доски <b id="shed-boards">0 из 8</b></span></div></div>
+      <div id="shed-cargo" class="shed-cargo"><span class="section-label">С собой</span><p class="shed-carry" id="shed-carry">Руки свободны</p></div>
+      <div class="shed-work"><div class="shed-feedback feedback" id="shed-feedback" role="status" aria-live="polite" hidden></div></div>
+      <div class="shed-commands" role="group" aria-label="Что сделать с материалами">
+        <div class="shed-command"><button id="shed-store" type="button" class="primary" aria-describedby="shed-store-reason"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3v12m-4-4 4 4 4-4M4 15v5h16v-5"/></svg><span id="shed-store-label">Сложить</span></button><small id="shed-store-reason"></small></div>
+        <div class="shed-command"><button id="shed-take-logs" type="button" aria-describedby="shed-take-logs-reason"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m7 19 10-13M4 15 14 3c2-2 7 3 5 5L9 21M4 15c-2 2 3 8 5 6s-3-8-5-6Z"/></svg><span id="shed-take-logs-label">Взять бревно</span></button><small id="shed-take-logs-reason"></small></div>
+        <div class="shed-command"><button id="shed-take-boards" type="button" aria-describedby="shed-take-boards-reason"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m3 15 11-11 7 5-11 11ZM3 15v4l7 3v-2M10 22 21 11V9M7 14l8-8"/></svg><span id="shed-take-boards-label">Взять доски</span></button><small id="shed-take-boards-reason"></small></div>
+        <div class="shed-command"><button id="shed-upgrade" type="button" aria-describedby="shed-upgrade-cost shed-upgrade-capacity shed-upgrade-reason"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m3 10 9-7 9 7M5 9v12h14V9M12 18v-7m-3 3 3-3 3 3"/></svg><span id="shed-upgrade-label">Улучшить</span></button><small id="shed-upgrade-cost">Цена: 2 доски из навеса.</small><small id="shed-upgrade-capacity">Оба отсека станут вместительнее.</small><small id="shed-upgrade-reason"></small></div>
+      </div>
+      <p class="shed-note" id="shed-hint">Можно нести одно бревно или до двух досок. Запас под крышей сначала возьми в руки. Материал в руках можно нести прямо к верстаку или ремонту.</p>
+      </div>
+    </section>
+
+    <section class="context" id="context" aria-labelledby="context-title" data-state="normal">
+      <div class="context-copy" role="status" aria-live="polite" aria-atomic="true"><strong id="context-title">Остров ждёт</strong><p id="context-detail">Нажми на дерево или плавник у берега — смотритель подойдёт.</p></div>
+      <div class="context-commands"><button id="context-command" type="button" class="primary" aria-describedby="context-detail" hidden>Начать</button><span id="context-key" class="keyboard-only context-key" hidden>или <kbd>E</kbd></span><button id="pause-work" type="button" class="primary" hidden>Пауза</button></div>
+    </section>
+
+    <aside class="save" id="save" role="alert" hidden><div class="save-copy"><span class="status-symbol" aria-hidden="true">!</span><span class="save-message" id="save-message">Запись недоступна. Прогресс пока здесь.</span></div><button id="save-dismiss" type="button">Прочитано</button></aside>
+  </div>
+  <p class="screen-status feedback" id="fullscreen-status" role="status" aria-live="polite"></p>
+  <div class="toast feedback" id="toast" role="status" aria-live="polite"></div>
+</main>
+
+<dialog id="help-dialog" aria-labelledby="help-title">
+  <div class="dialog-content">
+    <span class="eyebrow">Как играть</span><h2 id="help-title">Остров в твоём темпе</h2>
+    <p class="dialog-intro">Гуляй, занимайся делами или смотри на море. Пока смотритель стоит или отдыхает, день не проходит.</p>
+    <section class="help-section"><h3>Подойди и выбери дело</h3><p>Нажми на землю или предмет — смотритель подойдёт. Карточка предложит действие: нажми её кнопку или значок у предмета<span class="keyboard-only">; клавиша <kbd>E</kbd> делает то же самое</span>.</p><p>«Пауза» останавливает работу, «Стоп» — путь. Можно также нажать на землю<span class="keyboard-only"> или <kbd>Esc</kbd></span>. Сделанная часть работы сохраняется. Причина недоступности написана в карточке: это могут быть материалы, занятые руки или заполненный навес.</p></section>
+    <section class="help-section"><h3>От бревна к целой ступени</h3><p>Сруби дерево в роще или подбери плавник на берегу. Подними бревно в свободные руки, распили у верстака и принеси две доски к ступени дома. Смотритель работает сам после команды — ловить момент нажатия не нужно.</p><p>К берегу ведёт обход справа от каменной кромки. По желанию почини спуск: он откроет короткий путь к берегу и старому причалу. После ремонта дома можно зажечь маяк.</p></section>
+    <section class="help-section"><h3>Запасы и руки</h3><p>Навес — крытая поленница у правого края мастерской. Подойди к ней и открой команды кнопкой в карточке или значком. «Сложить» убирает груз под крышу; «Взять бревно» и «Взять доски» кладут выбранный материал в руки.</p><p>Можно нести одно бревно или до двух досок. Неполный груз досок можно дополнить. При полном отсеке остаток останется в руках. Запас под крышей сначала возьми в руки: он не расходуется на расстоянии. Материал в руках можно нести прямо к верстаку или ремонту.</p><p>Улучшение стоит две доски из навеса и расширяет оба отсека. Перекладывание не расходует день; путь и работа занимают время.</p></section>
+    <details class="help-detail"><summary>Камера и полный экран</summary><p>Веди пальцем или мышью в сторону для поворота, вверх и вниз — для наклона. Два пальца или колесо мыши меняют масштаб. Кнопка карты показывает весь остров, кнопка с точкой возвращает камеру к смотрителю.</p><p>Кнопка с четырьмя углами включает полный экран, если браузер это разрешает. Системные панели могут остаться. Для выхода нажми ту же кнопку<span class="keyboard-only"> или <kbd>Esc</kbd></span>.</p></details>
+    <details class="help-detail"><summary>Прогресс и настройки</summary><p>Эта проба хранит свой прогресс отдельно. Старое сохранение на том же адресе браузера переносится один раз без изменения прежней игры; запасы сверх вместимости сохраняются. После переноса версии продолжаются независимо. Если запись недоступна, появится предупреждение.</p><p>В меню можно уменьшить движение травы, крон, дыма и воды. Изначально учитывается настройка системы. Качество «Легче» сокращает декоративные детали и разрешение. «Показать плавность» выводит текущие FPS и время кадра — ориентир для этого устройства.</p></details>
+    <details class="help-detail keyboard-only"><summary>Клавиши</summary><p>Стрелки или <kbd>WASD</kbd> — ходьба, <kbd>E</kbd> — действие, <kbd>Esc</kbd> — остановка, <kbd>M</kbd> — весь остров, <kbd>F</kbd> — к смотрителю.</p></details>
+  </div>
+  <div class="dialog-actions"><button id="help-close" class="primary" type="button">Вернуться на остров</button></div>
+</dialog>
+<dialog id="restart-dialog" class="confirm-dialog" aria-labelledby="restart-title"><div class="dialog-content"><span class="eyebrow">Новое начало</span><h2 id="restart-title">Начать это утро заново?</h2><p>Ремонт и припасы этой пробы будут заменены начальным состоянием.</p></div><div class="dialog-actions"><button id="restart-cancel" type="button">Остаться здесь</button><button id="restart-confirm" class="primary" type="button">Начать заново</button></div></dialog>
+
+<section id="boot-status" class="boot-status" role="status" aria-live="polite"><svg class="boot-mark" viewBox="0 0 48 48" aria-hidden="true"><path d="m18 38 2-23h8l2 23M16 38h16M19 15h10M21 15V9h6v6M18 9l6-4 6 4M8 12l6 2m20 0 6-2M6 23l8-2m20 0 8 2"/></svg><h1>Остров смотрителя</h1><p id="boot-message">Готовим остров…</p><a id="legacy-link" href="./legacy/index.html" hidden>Открыть прежнюю демку</a></section>
 <script type="module" src="./bootstrap.js"></script>
 </body>
 </html>

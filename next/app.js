@@ -1,36 +1,36 @@
 (function(){
   "use strict";
-  var M=CloseModel,C=M.config,$=function(id){return document.getElementById(id);},canvas=$("world"),P=new CloseRenderer(canvas);
+  var U=CloseUI,view=new CloseInterface(),M=CloseModel,C=M.config,$=function(id){return document.getElementById(id);},canvas=$("world"),P=new CloseRenderer(canvas);
   var state=M.create(),job=null,hover=null,selectedTag=null,pointer={x:0,y:0},last=performance.now(),clock=0,walkPhase=0,stepSound=0,workSound=-1;
   var camera={x:C.start.x,y:.8,z:C.start.z,distance:C.camera.distance,yaw:C.camera.yaw,pitch:C.camera.pitch},distance=C.camera.distance,yaw=C.camera.yaw,pitch=C.camera.pitch,overview=false;
   var keys=new Set(),touches=new Map(),gesture=null,pinch=null,night=0,toastTimer,saveTimer=0;
   var revision=0,hasInitial=false,writer=Date.now().toString(36)+"-"+Math.random().toString(36).slice(2),KEY="lighthouse.close-work.storage.v1",LEGACY_KEY="lighthouse.close-work.v1",SLOT="closeIslandStorage",saveGood=true;
   var audio=null,master=null,ambient=null,windFilter=null,muted=false,lastSaved=0,audioAttempted=false,audioContexts=0,audioTick=-1,ambientGains=null,ambientLevels={wind:0,leaves:0,surf:0};
-  var sitting=false,sitBlend=0,visited=new Set(),placeTimer=0,saveBlocked=false,saveMemoryOnly=false,shedOpen=false,shedRevealAt=0;
+  var sitting=false,sitBlend=0,visited=new Set(),placeTimer=0,saveBlocked=false,saveMemoryOnly=false,shedOpen=false,shedRevealAt=0,panelNotice=null;
   var hostEnvelope=Object.assign({},globalThis.openai&&globalThis.openai.widgetState||{});
   var motionPreference=matchMedia("(prefers-reduced-motion: reduce)"),reducedMotion=motionPreference.matches,manualCamera=false,resultView=null,contextKey="",lastFrame=0,bottomHeight=110,coarsePointer=matchMedia("(pointer:coarse)").matches,fullscreenPending=false;
   var PRESENTATION_KEY="lighthouse.presentation.v1",motionOverride=null,quality="standard",islandTime=0,wind={x:.86,z:.5,strength:.25},perfStart=performance.now(),perfFrames=0,perfTotal=0,perf={fps:null,renderMs:null,sampleMs:0,frames:0},cpuSamples=[],intervalSamples=[],sampleCursor=0;
   try{var prefs=JSON.parse(localStorage.getItem(PRESENTATION_KEY)||"null");if(prefs&&typeof prefs==="object"){if(typeof prefs.reducedMotion==="boolean")motionOverride=prefs.reducedMotion;if(prefs.quality==="lighter")quality="lighter";}}catch(e){}
-  function applyPresentation(){reducedMotion=motionOverride===null?motionPreference.matches:motionOverride;P.quality=quality;$("motion").setAttribute("aria-pressed",String(reducedMotion));$("motion").textContent="Меньше движения: "+(reducedMotion?"вкл.":"выкл.");$("quality").setAttribute("data-quality",quality);$("quality").setAttribute("aria-pressed",String(quality==="lighter"));$("quality").textContent="Качество: "+(quality==="lighter"?"легче":"стандарт");}
+  function applyPresentation(){reducedMotion=motionOverride===null?motionPreference.matches:motionOverride;P.quality=quality;view.root.dataset.reducedMotion=String(reducedMotion);$("motion").setAttribute("aria-pressed",String(reducedMotion));$("motion").textContent="Меньше движения: "+(reducedMotion?"вкл.":"выкл.");$("quality").setAttribute("data-quality",quality);$("quality").setAttribute("aria-pressed",String(quality==="lighter"));$("quality").textContent="Качество: "+(quality==="lighter"?"легче":"стандарт");}
   function persistPresentation(){try{localStorage.setItem(PRESENTATION_KEY,JSON.stringify({reducedMotion:motionOverride,quality:quality}));}catch(e){}}
   motionPreference.addEventListener("change",function(){applyPresentation();});applyPresentation();
-  function notify(text){$("toast").textContent=text;$("toast").classList.add("visible");clearTimeout(toastTimer);toastTimer=setTimeout(function(){$("toast").classList.remove("visible");},4200);}
-  function clearNotice(){clearTimeout(toastTimer);$("toast").classList.remove("visible");$("toast").textContent="";}
+  function notify(text){if(shedOpen&&!$("shed-panel").hidden){if(!job)panelNotice={text:text,at:clock};updateShedPanel();}else view.notify(text,"result");}
+  function clearNotice(){view.clearNotice();panelNotice=null;}
   function widget(){return globalThis.openai&&typeof globalThis.openai.setWidgetState==="function";}
-  function saveError(){saveGood=false;$("save").classList.add("error");$("save").textContent="Запись недоступна. Не закрывай страницу: прогресс пока здесь.";}
-  function saveOK(){saveGood=true;$("save").classList.remove("error");$("save").textContent="Остров сохранён";}
-  function saveMemoryWarning(){saveGood=false;$("save").classList.add("error");$("save").textContent="Сохранение недоступно. Прогресс — до закрытия или перезагрузки.";}
+  function saveError(){saveGood=false;view.saveError("Не удалось записать прогресс. Не перезагружай и не закрывай страницу: последние изменения могут потеряться.");}
+  function saveOK(){saveGood=true;view.saveOK(widget()?"Прогресс сохранён в этом просмотрщике":"Прогресс сохранён в этом браузере",!!job||shedOpen);}
+  function saveMemoryWarning(){saveGood=false;view.saveError("Сохранение недоступно. Не перезагружай и не закрывай страницу: изменения останутся только до её закрытия.");}
   function persist(){
     if(saveBlocked)return;
     revision++;hasInitial=true;state.sync={revision:revision,writer:writer};var rev=revision;
     if(saveMemoryOnly){saveMemoryWarning();lastSaved=clock;return;}
     try{
-      if(widget()){$("save").textContent="Сохраняю остров…";var envelope=Object.assign({},hostEnvelope);envelope[SLOT]=JSON.parse(JSON.stringify(state));hostEnvelope=envelope;var pending=globalThis.openai.setWidgetState(envelope);if(pending&&typeof pending.then==="function")pending.then(function(){if(rev===revision)saveOK();},function(){if(rev===revision)saveError();});else saveOK();}
+      if(widget()){var envelope=Object.assign({},hostEnvelope);envelope[SLOT]=JSON.parse(JSON.stringify(state));hostEnvelope=envelope;var pending=globalThis.openai.setWidgetState(envelope);if(pending&&typeof pending.then==="function")pending.then(function(){if(rev===revision)saveOK();},function(){if(rev===revision)saveError();});else saveOK();}
       else {localStorage.setItem(KEY,JSON.stringify(state));saveOK();}
     }catch(e){saveError();}
     lastSaved=clock;
   }
-  function unreadableSave(){saveBlocked=true;saveError();$("save").textContent="Сохранение не прочитано и не перезаписано. Начать заново можно в меню.";}
+  function unreadableSave(){saveBlocked=true;saveGood=false;view.saveError("Не удалось прочитать сохранение. Оно не изменено. Начать заново можно в меню — это заменит прежний прогресс.");}
   try{
     var stored=null,present=false,imported=false;
     if(widget()){
@@ -87,22 +87,17 @@
   }
   function shedTag(tag){return !!tag&&tag.indexOf("shed:")===0;}
   function navAction(tag){
-    var a=M.info(state,actionForTag(tag));
-    if(a&&shedTag(tag))a=Object.assign({},a,{type:"shed",label:"Открыть навес: брёвна и доски",reason:"",available:true,done:false,progress:0});
+    var id=actionForTag(tag),a=M.info(state,id),description=U.action(state,id);
+    if(a&&description)a=Object.assign({},a,description);
+    if(a&&shedTag(tag)){var open=U.action(state,"shed:logs");a=Object.assign({},a,open,{id:id,type:"shed",reason:"",available:true,done:false,progress:0});}
+    if(a&&a.progress>0)a.label="Продолжить: "+a.label;
     return a;
   }
-  function materialText(n,kind,accusative){var forms=kind==="logs"?["бревно","бревна","брёвен"]:[accusative?"доску":"доска","доски","досок"],last=n%10,teen=n%100;return n+" "+forms[teen>=11&&teen<=14?2:last===1?0:last>=2&&last<=4?1:2];}
-  function cargoText(){return !state.carry.amount?"Руки свободны":"В руках: "+materialText(state.carry.amount,state.carry.kind);}
+  function materialText(n,kind,accusative){return U.material(n,kind,accusative);}
+  function cargoText(){return U.cargo(state);}
   function nearShed(){return Object.keys(C.shed.zones).some(function(k){var q=C.shed.zones[k];return Math.hypot(state.avatar.x-q.x,state.avatar.z-q.z)<=C.interactionReach&&M.clear(state,state.avatar,q);});}
-  function openShed(){if(saveBlocked||job||!nearShed())return;shedOpen=true;shedRevealAt=0;keys.clear();refresh();updateShedPanel();$("shed-store").focus({preventScroll:true});}
-  function nextMaterialHint(){
-    if(state.carry.kind==="boards"&&state.carry.amount>=C.repairBoards)return "Доски в руках — к ступени у дома";
-    if(state.carry.kind==="logs")return "Бревно в руках — к верстаку";
-    if(state.carry.amount)return "Дополни груз досок у навеса";
-    if(state.boards>=C.repairBoards)return "Возьми доски из навеса и отнеси к дому";
-    if(state.logs>0)return "Возьми бревно из навеса — к верстаку";
-    return state.trees.some(function(t){return t.felled&&!t.collected;})?"Подними древесину у пня":"Древесина: роща или берег";
-  }
+  function openShed(){if(saveBlocked||job||!nearShed())return;shedOpen=true;shedRevealAt=0;keys.clear();refresh();updateShedPanel();var first=["shed-store","shed-take-logs","shed-take-boards","shed-upgrade","shed-close"].find(function(id){return $(id).getAttribute("aria-disabled")!=="true";});$(first).focus({preventScroll:true});}
+  function nextMaterialHint(){return U.guidance(state,{sitting:sitting}).title;}
   function pause(silent){
     if(job){if(job.working)state.progress[job.id]=Math.min(.999999,job.elapsed/job.action.seconds);job=null;persist();}
   }
@@ -122,14 +117,14 @@
   function interact(tag){
     unlock();if(saveBlocked)return;if(shedTag(tag)){openShed();return;}var id=actionForTag(tag),a=id?M.info(state,id):null;if(!a)return;
     if(job&&job.id===id&&job.working){pause(false);refresh();return;}
-    if(!a.available){notify(a.reason);return;}
+    if(!a.available){notify(U.action(state,id).reason);return;}
     if(a.type==="rest"){clearNotice();pause(true);sitting=!sitting;keys.clear();if(sitting){yaw=2.05;pitch=.38;distance=11;overview=false;$("overview").setAttribute("aria-pressed","false");}refresh();return;}
     walk({x:a.x,z:a.z},a);
   }
   function refresh(){
-    var caps=M.capacity(state);$("logs").textContent=state.logs+"/"+caps.logs;$("boards").textContent=state.boards+"/"+caps.boards;$("carry").textContent=cargoText();$("objective").classList.toggle("done",state.repaired);
-    $("goal-title").textContent=state.lit?"Маяк светит":state.repaired?"Зажечь маяк":"Починить ступень у дома";
-    $("goal-next").textContent=sitting?"Отдых у моря":!state.repaired?nextMaterialHint():!state.lit?"Ступень готова — можно зажечь маяк":!state.stairs?"Спуск к берегу — по желанию":state.shedLevel===0?"Навес можно расширить за "+C.shed.upgradeBoards+" доски":"Можно отдохнуть на скамье";
+    var caps=M.capacity(state);$("logs").textContent=state.logs+" из "+caps.logs;$("boards").textContent=state.boards+" из "+caps.boards;$("carry").textContent=cargoText();$("objective").classList.toggle("done",state.repaired);
+    $("goal-title").textContent=state.lit?"Маяк светит":state.repaired?"Ступень готова":"Починить ступень";
+    $("goal-next").hidden=true;
     $("day").textContent=state.lit?"Вечерний огонь":state.daylight>.6?"Тёплый вечер":state.daylight>.32?"День у моря":"Утро у моря";
   }
   function update(dt){
@@ -166,7 +161,7 @@
         if(clock-lastSaved>1)persist();
         if(job.elapsed>=job.action.seconds){
           var id=job.id,type=job.action.type,result=M.finish(state,id);job=null;hover=null;
-          if(result.ok){state=result.state;if(type==="store"||type==="take"||type==="upgrade")shedRevealAt=clock+1.2;resultView={id:id,type:type,x:state.avatar.x,z:state.avatar.z,at:clock};sound("done");persist();refresh();notify(resultMessage(id,type,result.amount));}else {persist();notify(result.reason);}
+          if(result.ok){state=result.state;if(type==="store"||type==="take"||type==="upgrade")shedRevealAt=clock+1.2;resultView={id:id,type:type,x:state.avatar.x,z:state.avatar.z,at:clock,amount:result.amount};sound("done");persist();refresh();if(!(shedOpen&&(type==="store"||type==="take"||type==="upgrade")))notify(resultMessage(id,type,result.amount));}else {persist();notify(result.reason);}
         }
       }
     }
@@ -182,6 +177,15 @@
       else if(moving){target.x+=Math.sin(a.heading)*.65;target.z+=Math.cos(a.heading)*.65;}
       if(!manualCamera&&canvas.clientHeight<500)autoDistance*=.9;
     }
+    // Reframe into the actual free scene rectangle, preserving the user's yaw,
+    // pitch and zoom. This changes presentation only, never world coordinates.
+    var safe=view.layout(),w=canvas.clientWidth,h=canvas.clientHeight;
+    var framingScale=h/(2*Math.tan(w<h*.82?.58:.48)),framingDistance=overview?Math.max(36,h/w*35):autoDistance;
+    var centerY=h*(w<h*.82?.53:h<500?.48:.52);
+    var rightShift=(w*.5-safe.centerX)*framingDistance/framingScale,upShift=(safe.centerY-centerY)*framingDistance/framingScale;
+    target.x+=Math.cos(yaw)*rightShift-Math.sin(yaw)*Math.sin(autoPitch)*upShift;
+    target.y+=Math.cos(autoPitch)*upShift;
+    target.z-=Math.sin(yaw)*rightShift+Math.cos(yaw)*Math.sin(autoPitch)*upShift;
     var ease=reducedMotion?1:1-Math.exp(-dt*4.5);
     camera.x+=(target.x-camera.x)*ease;camera.y+=(target.y-camera.y)*ease;camera.z+=(target.z-camera.z)*ease;
     var mapDistance=Math.max(36,canvas.clientHeight/canvas.clientWidth*35);
@@ -190,12 +194,7 @@
     var name=areaName();if(name&&!visited.has(name)){visited.add(name);$("place").textContent=name;$("place").classList.add("visible");clearTimeout(placeTimer);placeTimer=setTimeout(function(){$("place").classList.remove("visible");},3200);}
     return moving;
   }
-  function resultMessage(id,type,amount){
-    if(type==="store")return "Сложено: "+materialText(amount,id.split(":")[1])+". "+cargoText()+".";
-    if(type==="take")return cargoText()+". "+(id==="take:logs"?"Можно отнести к верстаку.":"Можно отнести к ремонту.");
-    if(type==="upgrade")return "Навес расширен: "+M.capacity(state).logs+" брёвен / "+M.capacity(state).boards+" досок.";
-    return id==="repair"?"Ступень готова. Теперь можно зажечь маяк.":id==="stairs"?"Спуск готов — короткий путь к берегу открыт.":type==="chop"?"Дерево срублено. Бревно осталось у пня.":type==="collect"?"Бревно в руках. Отнеси к верстаку или сложи в навес.":type==="saw"?"Две доски в руках. Отнеси к ремонту или в навес.":"Маяк светит. Можно отдохнуть у моря.";
-  }
+  function resultMessage(id,type,amount){return U.result(state,id,type,amount);}
   function actorPosition(){return {x:state.avatar.x+(C.seat.x-state.avatar.x)*sitBlend,z:state.avatar.z+(C.seat.z-state.avatar.z)*sitBlend,heading:sitBlend>.1?C.seat.heading:state.avatar.heading};}
   function areaName(){var x=state.avatar.x,z=state.avatar.z;if(Math.hypot(x-5,z-9.6)<2)return "Старый причал";if(Math.hypot(x+12,z+4.6)<2.4)return "Видовая площадка";if(z>5.8&&x>1)return "Каменистый берег";if(x<-7.5&&z>-2)return "Тихая роща";return null;}
   function keeper(moving){
@@ -258,19 +257,19 @@
     }
     if(job&&job.path.length){var dest=job.path[job.path.length-1];P.ring(dest.x,dest.z,"#f5df9b9e",.33,M.height(dest.x,dest.z)+.045);}
     if(night>.05)P.beam([10,5.65,-7],[24+Math.sin(islandTime*.14)*10,3,-19],night);
-    var nearby=contextAction(),screen=nearby?P.project(targetPoint(nearby.tag)):null,button=$("act");
+    var nearby=contextAction(),screen=nearby?P.project(targetPoint(nearby.tag)):null,button=$("act"),safe=view.layout();
     button.hidden=!screen;
     if(nearby&&screen){
-      var bx=Math.max(28,Math.min(canvas.clientWidth-28,screen.x)),by=Math.max(canvas.clientHeight<500?104:168,Math.min(canvas.clientHeight-bottomHeight-42,screen.y-26));
+      var bx=Math.max(safe.left+24,Math.min(safe.right-24,screen.x)),by=Math.max(safe.top+24,Math.min(safe.bottom-24,screen.y-26));
       var head=P.project([actor.x,M.height(actor.x,actor.z)+1.9,actor.z]),feet=P.project([actor.x,M.height(actor.x,actor.z),actor.z]);
       if(head&&feet){var half=Math.max(14,Math.abs(feet.y-head.y)*.23);
         if(bx+24>head.x-half&&bx-24<head.x+half&&by+24>head.y-6&&by-24<feet.y+4){var side=head.x+half+30;bx=side<=canvas.clientWidth-28?side:Math.max(28,head.x-half-30);}}
       button.style.left=bx+"px";button.style.top=by+"px";
-      button.setAttribute("data-action",nearby.tag);button.setAttribute("aria-label",(nearby.action.progress>0?"Продолжить: ":"")+nearby.action.label+(nearby.action.available?"":". "+nearby.action.reason));button.setAttribute("title",(nearby.action.available?nearby.action.label:nearby.action.reason)+" (E)");button.setAttribute("aria-disabled",String(!nearby.action.available));
+      button.setAttribute("data-action",nearby.tag);button.setAttribute("aria-label",nearby.action.label+(nearby.action.available?"":". "+nearby.action.reason));button.setAttribute("title",(nearby.action.available?nearby.action.label:nearby.action.reason)+(view.keyboard()?" (E)":""));button.setAttribute("aria-disabled",String(!nearby.action.available));button.dataset.state=nearby.action.available?"normal":"disabled";
       $("action-path").setAttribute("d",actionIcons[nearby.action.type]);
     }else button.setAttribute("data-action","");
     var p=P.project([state.avatar.x,M.height(state.avatar.x,state.avatar.z)+2.03,state.avatar.z]);$("working").hidden=!job||!job.working||!p;
-    if(job&&job.working&&p){$("working").style.left=Math.max(40,Math.min(canvas.clientWidth-40,p.x))+"px";$("working").style.top=Math.max(canvas.clientHeight<500?102:166,Math.min(canvas.clientHeight-bottomHeight-20,p.y-14))+"px";$("working").setAttribute("aria-label",job.action.label);$("working").setAttribute("aria-valuenow",String(Math.round(work.progress*100)));$("work-progress").style.width=Math.min(100,work.progress*100)+"%";}
+    if(job&&job.working&&p){$("working").style.left=Math.max(safe.left+43,Math.min(safe.right-43,p.x))+"px";$("working").style.top=Math.max(safe.top+8,Math.min(safe.bottom-8,p.y-14))+"px";$("working").setAttribute("aria-label",U.action(state,job.id).label);$("working").setAttribute("aria-valuenow",String(Math.round(work.progress*100)));$("work-progress").style.width=Math.min(100,work.progress*100)+"%";}
     updateContext(nearby);updateShedPanel();
     canvas.style.cursor=gesture&&gesture.moved?"grabbing":hover&&actionForTag(hover)?"pointer":"grab";
     P.end();
@@ -285,7 +284,7 @@
   new ResizeObserver(function(entries){bottomHeight=entries[0].contentRect.height;$('game').style.setProperty('--status-height',bottomHeight+'px');}).observe($('bottom-ui'));
   if(globalThis.visualViewport)visualViewport.addEventListener('resize',resize);
   function local(e){var r=canvas.getBoundingClientRect();return {x:e.clientX-r.left,y:e.clientY-r.top};}
-  function closeMenu(){$("menu").hidden=true;$("more").setAttribute("aria-expanded","false");}
+  function closeMenu(){$("menu").hidden=true;$("more").setAttribute("aria-expanded","false");view.root.dataset.menu="";view.invalidate();}
   function cameraGesture(){overview=false;$("overview").setAttribute("aria-pressed","false");}
   function rotate(dx,dy){manualCamera=true;cameraGesture();yaw-=dx*.006;pitch=Math.max(C.camera.pitchMin,Math.min(C.camera.pitchMax,pitch+dy*.004));}
   canvas.addEventListener("pointerdown",function(e){unlock();closeMenu();canvas.focus({preventScroll:true});var p=local(e);touches.set(e.pointerId,p);canvas.setPointerCapture(e.pointerId);gesture={id:e.pointerId,start:p,last:p,moved:e.button===2||e.button===1};
@@ -316,44 +315,52 @@
     shed:"M3 10 12 3l9 7M5 9v12h14V9M8 15h8M8 18h8"
   };
   function contextAction(){
-    if(job||keys.size||!$("menu").hidden||document.querySelector("dialog[open]"))return null;
-    if(sitting)return {tag:"seat",action:{type:"stand",available:true,label:"Встать",progress:0}};
+    if(job||keys.size||shedOpen&&nearShed()||!$("menu").hidden||document.querySelector("dialog[open]"))return null;
+    if(sitting)return {tag:"seat",action:{type:"stand",available:true,label:"Встать со скамьи",object:"Отдых у моря",resultPreview:"Можно продолжить прогулку. День во время отдыха не проходит.",progress:0}};
     var tags=allTags(),best=null,dist=C.interactionReach;
     tags.forEach(function(tag){var a=navAction(tag);if(!a||a.done)return;var d=Math.hypot(state.avatar.x-a.x,state.avatar.z-a.z);if(d<=C.interactionReach&&M.clear(state,state.avatar,a)&&(!best||tag===selectedTag||(best.tag!==selectedTag&&d<dist))){best={tag:tag,action:a};dist=d;}});
     return best;
   }
   function updateContext(nearby){
-    var title,detail,active=!!job;
-    if(saveBlocked){title="Сохранение требует внимания";detail="Оно не перезаписано. Открой меню, чтобы начать заново.";}
-    else if(job&&job.working){title=job.action.label;detail=(job.action.type==="saw"?"Принесённое бревно → две доски в руках. ":job.action.type==="chop"?"Смотритель рубит сам; бревно останется у пня. ":job.action.type==="store"?"Груз переместится в штабель после укладки. ":"")+"Пауза — остановить; сделанная часть сохранится.";}
-    else if(job){title="Смотритель идёт";detail=selectedTag?"У предмета он остановится. Значок или E — начать работу.":"Нажми в другом месте, чтобы изменить путь.";}
-    else if(nearby){var a=nearby.action;title=(a.progress>0?"Продолжить: ":"")+a.label;
-      detail=!a.available?a.reason:a.type==="stand"?"Значок или E — встать и продолжить прогулку.":a.type==="shed"?"Брёвна и доски хранятся отдельно. Значок или E — открыть команды навеса.":a.type==="rest"?"Значок или E — присесть. День во время отдыха не проходит.":({chop:"Древесина останется у пня",collect:"+1 бревно в руках",saw:"1 бревно → 2 доски",repair:nearby.tag==="stairs"?"2 доски → короткий путь к берегу":"2 доски → целая ступень",light:"Огонь в фонаре маяка"}[a.type])+" · значок или E — начать.";}
-    else if(sitting){title="Отдых у моря";detail="День не проходит. Значок или E — встать.";}
-    else {title=state.lit?"Маяк светит":state.repaired?"Подойди к маяку":nextMaterialHint();
-      detail=state.lit?"Можно прогуляться, расширить навес или присесть у моря.":state.repaired?"Нажми на маяк, затем на значок огня.":state.carry.kind==="boards"?"Доски нужно принести к ступени. Навес принимает запасные материалы.":state.carry.kind==="logs"?"Нажми на верстак или на навес у мастерской.":state.logs>0||state.boards>0?"Запас под крышей: подойди к навесу и выбери, что взять.":"Нажми на дерево или плавник у берега — смотритель подойдёт.";}
-    var key=title+"|"+detail+"|"+active;if(key===contextKey)return;contextKey=key;
-    $("context-title").textContent=title;$("context-detail").textContent=detail;$("pause-work").hidden=!active;$("pause-work").textContent=job&&job.working?"Пауза":"Стоп";
+    var title,detail,action=null,tag=null,mode="normal";
+    if(saveBlocked){title="Игра приостановлена";detail="Сохранение не изменено. Для нового начала открой меню.";mode="disabled";}
+    else if(job&&job.working){var work=U.action(state,job.id);title=work.object;detail=work.label+". "+(work.resultPreview||"Сделанная часть сохранится при паузе.");mode="busy";}
+    else if(job){title="Смотритель идёт";detail=selectedTag?"У предмета он остановится. Затем выбери действие.":"Можно выбрать другое место и изменить путь.";mode="busy";}
+    else if(nearby){action=nearby.action;tag=nearby.tag;title=action.object||"Рядом со смотрителем";detail=action.available?action.resultPreview||action.detail:action.reason;mode=action.available?"normal":"disabled";}
+    else {var guidance=U.guidance(state,{sitting:sitting});title=guidance.title;detail=guidance.detail;}
+    view.context({title:title,detail:detail,action:action,tag:tag,mode:mode,job:!!job,working:!!(job&&job.working)});
   }
   function shedCommand(id){
     if(saveBlocked||job||!shedOpen||$("shed-panel").hidden||!nearShed())return;
-    var a=id?M.info(state,id):null;if(!a||!a.available){notify(a?a.reason:"Сначала принеси материал в руках.");return;}
+    var a=id?M.info(state,id):null;if(!a||!a.available){notify(U.action(state,id||"store:logs").reason);return;}
     selectedTag=id==="shed:upgrade"?id:"shed:"+id.split(":")[1];keys.clear();unlock();walk(a,a);shedOpen=true;
   }
   function updateShedPanel(){
     if(!job&&!nearShed())shedOpen=false;
-    var show=shedOpen&&clock>=shedRevealAt&&!job&&!saveBlocked&&nearShed()&&$("menu").hidden&&!document.querySelector("dialog[open]");$("shed-panel").hidden=!show;if(!show)return;
-    var caps=M.capacity(state),store=state.carry.kind?"store:"+state.carry.kind:null;
-    $("shed-logs").textContent=state.logs+" / "+caps.logs;$("shed-boards").textContent=state.boards+" / "+caps.boards;$("shed-carry").textContent=cargoText();
+    var show=shedOpen&&!saveBlocked&&nearShed()&&$("menu").hidden&&!document.querySelector("dialog[open]");view.panel(show);if(!show)return;
+    var caps=M.capacity(state),store=state.carry.kind?"store:"+state.carry.kind:null,busy=!!job;
+    $("shed-logs").textContent=state.logs+" из "+caps.logs;$("shed-boards").textContent=state.boards+" из "+caps.boards;$("shed-carry").textContent=cargoText();
     [["shed-store",store],["shed-take-logs","take:logs"],["shed-take-boards","take:boards"],["shed-upgrade","shed:upgrade"]].forEach(function(pair){
-      var button=$(pair[0]),a=pair[1]?M.info(state,pair[1]):null,reason=!a?"Принеси материал в руках.":a.reason,detail="";
-      if(a&&a.available)detail=a.type==="upgrade"?C.shed.upgradeBoards+" доски из навеса → "+C.shed.capacity[1].logs+" брёвен / "+C.shed.capacity[1].boards+" досок":a.type==="store"?"Сложить: "+materialText(a.amount,state.carry.kind,true)+(a.amount<state.carry.amount?". Остаток останется в руках.":""):"В руки: "+materialText(a.amount,pair[1].split(":")[1]);
-      button.setAttribute("aria-disabled",String(!a||!a.available));button.setAttribute("data-action-id",pair[1]||"");button.title=reason||detail;$(pair[0]+"-reason").textContent=reason||detail;
+      var button=$(pair[0]),description=pair[1]?U.action(state,pair[1]):null;
+      view.command(button,description,{label:$(pair[0]+"-label"),reason:$(pair[0]+"-reason"),busy:busy,active:!!job&&job.id===pair[1],describedBy:pair[0]==="shed-upgrade"?"shed-upgrade-cost shed-upgrade-capacity shed-upgrade-reason"+(busy?" shed-feedback":""):null,emptyLabel:"Сложить материалы",emptyReason:U.action(state,"store:logs").reason});
+      button.setAttribute("data-action-id",pair[1]||"");
+      if(busy&&job.id===pair[1])button.dataset.state="busy";
     });
+    var upgrade=U.action(state,"shed:upgrade");$("shed-upgrade-cost").hidden=upgrade.done;$("shed-upgrade-cost").textContent=upgrade.cost;$("shed-upgrade-capacity").textContent=upgrade.done?"Вместимость: брёвна "+caps.logs+", доски "+caps.boards:upgrade.capacityPreview;
+    var feedback=$("shed-feedback"),result=resultView&&clock-resultView.at<6&&["store","take","upgrade"].indexOf(resultView.type)>=0,notice=panelNotice&&clock-panelNotice.at<6,wasBusy=$("shed-panel").dataset.state==="busy";
+    feedback.hidden=!busy&&!result&&!notice;$("shed-panel").dataset.state=busy?"busy":result?"result":"normal";
+    if(busy)view.feedback(feedback,(job.working?"Идёт работа: ":"Подходим к отсеку: ")+U.action(state,job.id).label+". Сделанная часть сохраняется при паузе.","busy");
+    else if(notice)view.feedback(feedback,panelNotice.text,"disabled");
+    else if(result)view.feedback(feedback,U.result(state,resultView.id,resultView.type,resultView.amount),"result");
+    $("shed-pause").hidden=!busy;$("shed-pause").textContent=job&&job.working?"Пауза":"Стоп";$("shed-pause").setAttribute("aria-label",job&&job.working?"Приостановить работу":"Остановиться");
+    if(busy&&!wasBusy||!busy&&wasBusy){$("shed-scroll").scrollTop=0;if(view.keyboard())$(busy?"shed-pause":"shed-close").focus({preventScroll:true});}
   }
-  $("shed-close").addEventListener("click",function(){shedOpen=false;$("shed-panel").hidden=true;canvas.focus({preventScroll:true});});
-  ["shed-store","shed-take-logs","shed-take-boards","shed-upgrade"].forEach(function(id){$(id).addEventListener("click",function(){shedCommand(this.getAttribute("data-action-id"));canvas.focus({preventScroll:true});});});
-  $("pause-work").addEventListener("click",function(){var working=job&&job.working;pause(false);keys.clear();refresh();if(working)notify("Работа на паузе. Значок или E — продолжить с этого места.");canvas.focus({preventScroll:true});});
+  function closeShed(){shedOpen=false;panelNotice=null;view.panel(false);canvas.focus({preventScroll:true});}
+  $("shed-close").addEventListener("click",closeShed);
+  ["shed-store","shed-take-logs","shed-take-boards","shed-upgrade"].forEach(function(id){$(id).addEventListener("click",function(){if(job){notify("Идёт действие. Можно дождаться результата или приостановить работу.");return;}shedCommand(this.getAttribute("data-action-id"));});});
+  function pauseFromUI(){var working=job&&job.working;pause(false);keys.clear();refresh();if(working)notify("Работа приостановлена. Выбери ту же команду, чтобы продолжить.");}
+  $("pause-work").addEventListener("click",pauseFromUI);$("shed-pause").addEventListener("click",pauseFromUI);
+  $("context-command").addEventListener("click",function(){if(this.hidden)return;nearest();if(!shedOpen)canvas.focus({preventScroll:true});});
   function nearest(){
     if(job&&job.working){pause(true);refresh();return;}
     var nearby=contextAction();if(nearby)interact(nearby.tag);
@@ -361,7 +368,10 @@
   $("act").addEventListener("click",function(){if(this.hidden)return;var nearby=contextAction();if(nearby&&nearby.tag===this.getAttribute("data-action")){interact(nearby.tag);if(!shedTag(nearby.tag))canvas.focus({preventScroll:true});}});
   document.addEventListener("keydown",function(e){
     if(document.querySelector("dialog[open]"))return;
-    if(!$("menu").hidden){if(e.code==="Escape")closeMenu();return;}
+    if(!$("menu").hidden){if(e.code==="Escape"){closeMenu();$("more").focus({preventScroll:true});}return;}
+    if(shedOpen&&e.code==="Escape"){pause(false);closeShed();refresh();return;}
+    if(shedOpen&&e.code==="KeyE")return;
+    if(e.target.closest&&e.target.closest("button")&&e.code!=="Escape")return;
     if(["ArrowUp","ArrowDown","ArrowLeft","ArrowRight","KeyW","KeyA","KeyS","KeyD"].indexOf(e.code)>=0){e.preventDefault();keys.add(e.code);unlock();}
     if(e.code==="KeyE"&&!e.repeat)nearest();if(e.code==="KeyM"&&!e.repeat)toggleOverview();if(e.code==="KeyF"&&!e.repeat)resetCamera();if(e.code==="Escape"){pause(false);sitting=false;shedOpen=false;refresh();}
   });
@@ -369,7 +379,7 @@
   globalThis.addEventListener("blur",function(){keys.clear();});
   function fullscreenElement(){return document.fullscreenElement||document.webkitFullscreenElement;}
   function fullscreenSync(){var active=!!fullscreenElement(),button=$("fullscreen");button.setAttribute("aria-pressed",String(active));button.setAttribute("aria-label",active?"Выйти из полного экрана":"На весь экран");button.title=active?"Выйти из полного экрана":"На весь экран";$("fullscreen-path").setAttribute("d",active?"M3 8h5V3M21 8h-5V3M16 21v-5h5M8 21v-5H3":"M8 3H3v5M16 3h5v5M21 16v5h-5M8 21H3v-5");resize();}
-  function fullscreenFallback(text){$("fullscreen-status").textContent=text+" Игра занимает доступный экран; панели браузера могут остаться.";fullscreenSync();}
+  function fullscreenFallback(text){view.fullscreen(text+" Игра занимает доступный экран; панели браузера могут остаться.");fullscreenSync();}
   $("fullscreen").addEventListener("click",async function(){
     if(fullscreenPending)return;fullscreenPending=true;
     var button=this,root=document.documentElement,active=!!fullscreenElement(),request=root.requestFullscreen||root.webkitRequestFullscreen,exit=document.exitFullscreen||document.webkitExitFullscreen;
@@ -377,18 +387,18 @@
     try{
       if(active){if(!exit)throw new Error("exit unavailable");await exit.call(document);}
       else if(!request||document.fullscreenEnabled===false||document.webkitFullscreenEnabled===false){fullscreenFallback("Браузер или просмотрщик не разрешает полный экран.");return;}
-      else {$("fullscreen-status").textContent="Открываю полный экран…";await request.call(root);}
+      else {view.fullscreen("Открываю полный экран…");await request.call(root);}
       fullscreenSync();
     }catch(e){if(!active&&fullscreenElement())fullscreenChanged();else fullscreenFallback(active?"Не удалось выйти из полного экрана. Используй системную кнопку выхода.":"Полный экран не включился. Можно открыть ссылку в отдельной вкладке.");}
     finally{fullscreenPending=false;button.removeAttribute("aria-busy");}
   });
-  function fullscreenChanged(){fullscreenSync();$("fullscreen-status").textContent=fullscreenElement()?"Полный экран · выйти — кнопка с углами или Escape.":"Обычный экран · игра занимает доступную область.";}
+  function fullscreenChanged(){fullscreenSync();view.fullscreen(fullscreenElement()?"Полный экран. Выход — та же кнопка или Escape.":"Полный экран закрыт. Игра занимает доступную область.");}
   document.addEventListener("fullscreenchange",fullscreenChanged);document.addEventListener("webkitfullscreenchange",fullscreenChanged);
   document.addEventListener("fullscreenerror",function(){if(fullscreenElement())fullscreenChanged();else fullscreenFallback("Браузер отклонил полный экран.");});fullscreenSync();
-  $("overview").addEventListener("click",toggleOverview);
+  $("overview").addEventListener("click",function(){toggleOverview();closeMenu();canvas.focus({preventScroll:true});});
   function resetCamera(){manualCamera=false;resultView=null;cameraGesture();yaw=C.camera.yaw;pitch=C.camera.pitch;distance=C.camera.distance;}
-  $("focus").addEventListener("click",resetCamera);
-  function toggleMenu(){var visible=$("menu").hidden;$("menu").hidden=!visible;$("more").setAttribute("aria-expanded",String(visible));if(visible){pause(true);keys.clear();}}
+  $("focus").addEventListener("click",function(){resetCamera();closeMenu();canvas.focus({preventScroll:true});});
+  function toggleMenu(){var visible=$("menu").hidden;$("menu").hidden=!visible;$("more").setAttribute("aria-expanded",String(visible));view.root.dataset.menu=visible?"open":"";if(visible){pause(true);keys.clear();$("sound").focus({preventScroll:true});}view.invalidate();}
   // Some touch/fullscreen paths deliver pointerup without the compatibility
   // click. Activate a short in-bounds touch once; keep native keyboard/mouse.
   var menuTouch=null,menuTouchClickUntil=0;
@@ -404,7 +414,7 @@
     menuTouchClickUntil=performance.now()+750;e.preventDefault();toggleMenu();
   });
   $("more").addEventListener("click",function(e){if(e&&e.detail>0&&performance.now()<menuTouchClickUntil)return;toggleMenu();});
-  $("sound").addEventListener("click",function(){muted=!muted;this.setAttribute("aria-pressed",String(muted));this.setAttribute("aria-label",muted?"Включить звук":"Выключить звук");this.style.opacity=muted?".6":"1";this.textContent=muted?"Звук выкл.":"Звук вкл.";if(!muted)unlock();else audioVisibility();});
+  $("sound").addEventListener("click",function(){muted=!muted;this.setAttribute("aria-pressed",String(muted));this.setAttribute("aria-label",muted?"Включить звук":"Выключить звук");this.textContent=muted?"Звук выкл.":"Звук вкл.";if(!muted)unlock();else audioVisibility();});
   $("motion").addEventListener("click",function(){motionOverride=!reducedMotion;applyPresentation();persistPresentation();});
   $("quality").addEventListener("click",function(){quality=quality==="standard"?"lighter":"standard";applyPresentation();resize();persistPresentation();resetPerformance();});
   $("performance-toggle").addEventListener("click",function(){var show=$("performance-panel").hidden;$("performance-panel").hidden=!show;this.setAttribute("aria-pressed",String(show));this.textContent=show?"Скрыть плавность":"Показать плавность";if(show)$("performance-panel").textContent="Измеряю FPS и время кадра…";});
@@ -432,6 +442,7 @@
     project:function(p){return P.project(p);},
     isResting:function(){return sitting;},
     targetPoints:function(){var out={};allTags().forEach(function(tag){out[tag]=P.project(targetPoint(tag));});return out;},
+    interface:function(){return {input:view.root.dataset.input,panel:view.root.dataset.panel,scene:view.layout(),saveError:!!view.errorKey,saveErrorRead:view.errorRead};},
     camera:function(){var p=actorPosition(),h=M.height(p.x,p.z),a=P.project([p.x,h,p.z]),b=P.project([p.x,h+1.8,p.z]);return {distance:camera.distance,yaw:camera.yaw,pitch:camera.pitch,targetDistance:distance,targetYaw:yaw,targetPitch:pitch,overview:overview,manual:manualCamera,framing:job&&job.working?"work":resultView&&clock-resultView.at<3?"result":job&&job.path.length?"walk":"idle",keeperPixels:a&&b?Math.abs(a.y-b.y):0,renderer:P.mode,faces:P.stats?P.stats.faces:0};}
   };
   function allTags(){return state.trees.map(function(t){return (t.felled?"logs:":"tree:")+t.id;}).concat(state.shore.filter(function(d){return !d.collected;}).map(function(d){return "drift:"+d.id;}),["bench","step","stairs","seat","lighthouse","shed:logs","shed:boards","shed:upgrade"]);}
