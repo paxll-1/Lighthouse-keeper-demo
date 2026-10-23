@@ -46,9 +46,11 @@ export function observationFrame(width, height, observation, distance = 20) {
   if (!source || source.length !== 3 || ![0, 1, 2].every(k => Number.isFinite(source[k]))) return null;
   const eye = Array.from(source), yaw = Number.isFinite(observation.yaw) ? observation.yaw : 0;
   const pitch = clamp(Number.isFinite(observation.pitch) ? observation.pitch : 0, -.15, .55);
-  const opticalZoom = clamp(Number.isFinite(observation.zoom) ? observation.zoom : 2, 1, 3);
+  const opticalZoom = clamp(Number.isFinite(observation.zoom) ? observation.zoom : 2, 1, 7);
   const cp = Math.cos(pitch), forward = norm([-Math.sin(yaw) * cp, -Math.sin(pitch), -Math.cos(yaw) * cp]);
   const right = norm(cross(forward, [0, 1, 0])), up = cross(right, forward), portrait = width < height * .82;
+  // Multiplying focal length gives a true 1–7× perspective projection. The
+  // shader and projectPoint share this scale; the canvas itself is never scaled.
   return { eye, forward, right, up, scale: height / (2 * Math.tan(portrait ? .58 : .48)) * opticalZoom,
     centerX: Number.isFinite(observation.centerX) ? clamp(observation.centerX, 0, width) : width * .5,
     centerY: Number.isFinite(observation.centerY) ? clamp(observation.centerY, 0, height) : height * (portrait ? .53 : height < 500 ? .48 : .52),

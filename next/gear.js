@@ -37,10 +37,9 @@
     attr(view.root,"data-gear",mode);attr($("tool-panel"),"data-mode",mode);
     var intended=data.bagOpen?"bag":mode;view.panel(intended!=="none",intended);
     var snapshot=view.snapshot?view.snapshot():{mode:data.bagOpen?"bag":mode==="binoculars"?"binoculars":"walk",detail:null};
-    var bagOpen=snapshot.mode==="bag",bagPlaces=bagOpen&&snapshot.detail==="bag-places",places=snapshot.mode==="binoculars"&&snapshot.detail==="places";
-    var points=(Array.isArray(data.points)?data.points:[]).filter(function(p){return p&&p.id!=null;}).slice(0,3).map(function(p){return {id:String(p.id),name:String(p.name||p.label||"Берег"),detail:String(p.detail||"")};});
+    var bagOpen=snapshot.mode==="bag",bagPlaces=bagOpen&&snapshot.detail==="bag-places";
+    var points=(Array.isArray(data.points)?data.points:[]).filter(function(p){return p&&p.id!=null;}).slice(0,12).map(function(p){return {id:String(p.id),name:String(p.name||p.label||"Берег"),detail:String(p.detail||"")};});
     var pointId=data.point&&typeof data.point==="object"?String(data.point.id):data.point==null?"":String(data.point);
-    var point=points.find(function(p){return p.id===pointId;})||null;
     attr($("bag"),"aria-expanded",bagOpen);attr($("bag"),"aria-pressed",bagOpen||mode!=="none");
     attr($("bag"),"aria-label",bagOpen?"Закрыть сумку смотрителя":"Сумка смотрителя");
     attr($("bag"),"title",(bagOpen?"Закрыть сумку":"Сумка смотрителя")+(view.keyboard()?" (B)":""));
@@ -55,21 +54,26 @@
     changed=hidden($("bag-main"),bagPlaces)||changed;changed=hidden($("bag-coast"),!bagPlaces)||changed;changed=hidden($("bag-places-back"),!bagPlaces)||changed;
     attr($("bag-places-toggle"),"aria-expanded",bagPlaces);
     changed=text($("tool-title"),mode==="lantern"?"Фонарь":"Бинокль")||changed;
-    // The current point has exactly one visible name, in coast-point.
+    // The view can turn freely, so a selected destination is not a gaze label.
     changed=text($("tool-status"),"")||changed;changed=hidden($("tool-status"),true)||changed;
     changed=text($("tool-close-label"),mode==="lantern"?"Убрать фонарь":"Выйти")||changed;
     attr($("tool-close"),"aria-label",mode==="lantern"?"Убрать фонарь":"Выйти из бинокля");
     attr($("tool-close"),"title",(mode==="lantern"?"Убрать фонарь":"Выйти из бинокля")+(view.keyboard()?" (Esc)":""));
+    attr($("tool-panel"),"aria-describedby",mode==="binoculars"?"binocular-instructions":"");
     changed=hidden($("tool-scroll"),mode!=="binoculars")||changed;
-    changed=hidden($("binocular-coast"),!places)||changed;
-    changed=hidden($("binocular-places-toggle"),!points.length||places||mode!=="binoculars")||changed;
-    attr($("binocular-places-toggle"),"aria-expanded",places);
-    var min=Number.isFinite(data.minZoom)?data.minZoom:1,max=Number.isFinite(data.maxZoom)?Math.max(min,data.maxZoom):4;
-    var zoom=Number.isFinite(data.zoom)?data.zoom:min;
+    // Walk destinations belong in the bag. Keep the old nodes for app bindings,
+    // but never open a list or navigation panel over the optical view.
+    changed=hidden($("binocular-coast"),true)||changed;
+    changed=hidden($("binocular-places-toggle"),true)||changed;
+    attr($("binocular-places-toggle"),"aria-expanded",false);
+    var min=Number.isFinite(data.minZoom)?data.minZoom:1,max=Number.isFinite(data.maxZoom)?Math.max(min,data.maxZoom):7;
+    var zoom=Math.max(min,Math.min(max,Number.isFinite(data.zoom)?data.zoom:min));
     text($("binocular-zoom"),zoomFormat.format(zoom)+"×");
     attr($("binocular-minus"),"aria-disabled",zoom<=min+.001);attr($("binocular-plus"),"aria-disabled",zoom>=max-.001);
+    attr($("binocular-minus"),"title","Уменьшить приближение"+(view.keyboard()?" (−)":""));
+    attr($("binocular-plus"),"title","Увеличить приближение"+(view.keyboard()?" (+)":""));
     attr($("coast-previous"),"aria-disabled",points.length<2);attr($("coast-next"),"aria-disabled",points.length<2);
-    changed=text($("coast-point"),point?point.name:"Свободный взгляд")||changed;
+    changed=text($("coast-point"),mode==="binoculars"?"Бинокль":"")||changed;
     $("binocular-points").querySelectorAll("[data-coast-point]").forEach(function(button){var selected=button.dataset.coastPoint===pointId;attr(button,"aria-pressed",selected);attr(button,"data-state",selected?"selected":"normal");});
     if(changed)view.invalidate();
   };

@@ -11,6 +11,38 @@
   function mix(a,b,t){const ca=a.match(/\w\w/g).map(q=>parseInt(q,16)),cb=b.match(/\w\w/g).map(q=>parseInt(q,16));return '#'+ca.map((v,k)=>Math.round(v+(cb[k]-v)*Math.max(0,Math.min(1,t))).toString(16).padStart(2,'0')).join('');}
   function keep(P,key,fn){if(P.retain)P.retain(key,fn);else fn();}
   function coastPoint(i,n,r=1){const a=i*TAU/n,noise=1+.045*Math.sin(a*7)+.025*Math.cos(a*11);return [Math.cos(a)*17*r*noise,Math.sin(a)*13*r*noise];}
+  function extension(){return G.CloseModel.config.terrain.coastExtension;}
+  function inPolygon(x,z,v){
+    let inside=false;
+    for(let i=0,j=v.length-1;i<v.length;j=i++){
+      const a=v[j],b=v[i];
+      if((a[1]>z)!==(b[1]>z)&&x<(b[0]-a[0])*(z-a[1])/(b[1]-a[1])+a[0])inside=!inside;
+    }return inside;
+  }
+  function boundaryCuts(a,b,v){
+    const dx=b[0]-a[0],dz=b[1]-a[1],cuts=[];
+    for(let i=0;i<v.length;i++){
+      const p=v[i],q=v[(i+1)%v.length],ex=q[0]-p[0],ez=q[1]-p[1],den=dx*ez-dz*ex;
+      if(Math.abs(den)<1e-12)continue;
+      const t=((p[0]-a[0])*ez-(p[1]-a[1])*ex)/den,u=((p[0]-a[0])*dz-(p[1]-a[1])*dx)/den;
+      if(t>0&&t<1&&u>=0&&u<=1)cuts.push(t);
+    }return cuts;
+  }
+  function triangles(v){
+    // The authored cove is concave; renderer.poly accepts only convex faces.
+    const cross=(a,b,c)=>(b[0]-a[0])*(c[1]-a[1])-(b[1]-a[1])*(c[0]-a[0]);
+    const ids=v.map((_,i)=>i),out=[];
+    while(ids.length>3){
+      let found=false;
+      for(let k=0;k<ids.length;k++){
+        const a=v[ids[(k+ids.length-1)%ids.length]],b=v[ids[k]],c=v[ids[(k+1)%ids.length]];
+        if(cross(a,b,c)<=1e-9)continue;
+        if(ids.some(i=>v[i]!==a&&v[i]!==b&&v[i]!==c&&cross(a,b,v[i])>=-1e-9&&cross(b,c,v[i])>=-1e-9&&cross(c,a,v[i])>=-1e-9))continue;
+        out.push([a,b,c]);ids.splice(k,1);found=true;break;
+      }
+      if(!found)throw new Error('Invalid coast outline');
+    }out.push(ids.map(i=>v[i]));return out;
+  }
   function slopeBreaks(){const t=G.CloseModel.config.terrain;return [t.shoreStart,t.shoreEnd];}
   function clipZ(vertices,z,above){
     const out=[];
@@ -72,10 +104,12 @@
     for(let i=0;i<n;i++){
       const a=point(i,1),b=point(i+1,1),south=(a[1]+b[1])/2>4;
       const stops=[0,1];
+      stops.push(...boundaryCuts(a,b,extension().outline));
       for(const z of slopeBreaks())if((a[1]<z&&b[1]>z)||(a[1]>z&&b[1]<z))stops.push((z-a[1])/(b[1]-a[1]));
       stops.sort((u,v)=>u-v);
       for(let j=0;j<stops.length-1;j++){
         const p=[a[0]+(b[0]-a[0])*stops[j],a[1]+(b[1]-a[1])*stops[j]],q=[a[0]+(b[0]-a[0])*stops[j+1],a[1]+(b[1]-a[1])*stops[j+1]];
+        if(inPolygon((p[0]+q[0])/2,(p[1]+q[1])/2,extension().outline))continue;
         const top=H(p[0],p[1]),end=H(q[0],q[1]);
         const a0=i+stops[j],a1=i+stops[j+1];
         function shoulder(v,k){
@@ -139,8 +173,50 @@
       const a=i*TAU/26+.04,q=coastPoint(i+.16,26,.987),rho=Math.hypot(q[0]/16,q[1]/12),out=Math.max(1,1.085/rho),x=q[0]*out,z=q[1]*out;
       if(z>7&&x>0)continue;
       const w=.44+seed(i+810)*.79,h=.52+seed(i+820)*.68,bed=()=>-.76;
+      if([[x,z],[x-w,z],[x+w,z],[x,z-w],[x,z+w]].some(p=>inPolygon(...p,extension().outline)))continue;
       rock(P,bed,x,z,w,w*(.5+seed(i+830)*.5),h,i%3?'#899c9d':'#a2aa9e');
       if(P.quality!=='lighter'&&i%3===1)rock(P,bed,x+Math.cos(a)*.45,z+Math.sin(a)*.45,w*.52,w*.47,h*.65,'#758e94');
+    }
+  }
+  function cove(P,H){
+    const E=extension(),outline=E.outline,old=Array.from({length:64},(_,i)=>coastPoint(i,64));
+    for(const face of triangles(outline)){
+      const z=face.reduce((sum,v)=>sum+v[1],0)/3;
+      surface(P,H,face,z<1?'#b9b99a':z<3.8?'#cebf99':'#d5c49d',.004);
+    }
+    // Only the exposed outline gets cliffs; the join has one continuous top.
+    for(let i=0;i<outline.length;i++){
+      const a=outline[i],b=outline[(i+1)%outline.length],cuts=[0,...boundaryCuts(a,b,old),1];
+      for(const z of slopeBreaks())if((a[1]<z&&b[1]>z)||(a[1]>z&&b[1]<z))cuts.push((z-a[1])/(b[1]-a[1]));
+      cuts.sort((x,y)=>x-y);
+      for(let k=1;k<cuts.length;k++){
+        const at=t=>[a[0]+(b[0]-a[0])*t,a[1]+(b[1]-a[1])*t],p=at(cuts[k-1]),q=at(cuts[k]),m=at((cuts[k-1]+cuts[k])/2);
+        if(inPolygon(...m,old))continue;
+        const len=Math.hypot(q[0]-p[0],q[1]-p[1])||1,nx=(q[1]-p[1])/len,nz=(p[0]-q[0])/len;
+        const top=[p[0],H(...p)+.004,p[1]],end=[q[0],H(...q)+.004,q[1]],toe=[p[0]+nx*.17,-.75,p[1]+nz*.17],far=[q[0]+nx*.17,-.75,q[1]+nz*.17];
+        P.poly([top,end,toe],i%3?'#aab199':'#c4bd9c');P.poly([end,far,toe],'#829b94');
+        P.poly([toe,far,[far[0]+nx*.16,-1.02,far[2]+nz*.16],[toe[0]+nx*.16,-1.02,toe[2]+nz*.16]],'#64878b');
+        P.poly([[toe[0],-.716,toe[2]],[far[0],-.716,far[2]],[far[0]+nx*.32,-.716,far[2]+nz*.32],[toe[0]+nx*.32,-.716,toe[2]+nz*.32]],'#83b7aa',.45);
+      }
+    }
+    // A few connected forms establish the gate, sheltered turn and low pool.
+    ribbon(P,H,E.trail,1.0,'#dfcfa9',.013);
+    ellipse(P,H,18.45,2.6,.65,.78,'#d4c5a1',.014,12);
+    E.rocks.forEach((r,i)=>rock(P,H,r.x,r.z,r.rx,r.rz,r.height,i<2?'#8c9d95':i%2?'#a0aa96':'#929e92'));
+    const pool=E.pool;
+    ellipse(P,H,pool.x,pool.z,pool.rx*1.22,pool.rz*1.6,'#a2ad94',.01,16);
+    ellipse(P,H,pool.x,pool.z,pool.rx,pool.rz,'#79a7a0',.017,16);
+    ribbon(P,H,[[19.55,6.08],[20.05,5.98],[20.65,6.01]],.025,'#d0ddc4',.02);
+    for(const [x,z,turn] of [[19.05,5.7,.25],[21.05,6.4,-.25],[20.9,5.56,.65]]){
+      P.group({x,y:H(x,z)+.02,z,ry:turn},()=>{
+        P.poly([[-.24,0,0],[.2,.004,.07],[.34,0,.13],[.13,0,.13]],'#758878');
+        if(P.quality!=='lighter')P.poly([[-.1,0,.02],[-.16,.005,-.09],[.06,.008,-.02],[.2,0,-.06],[.08,0,.04]],'#8c9877');
+      });
+    }
+    // Grouped gravel at the sheltered side of each gate stone, away from feet.
+    for(const [x,z] of [[16.05,-2.0],[16.15,.5],[21.8,4.8]])for(let i=0;i<(P.quality==='lighter'?2:4);i++){
+      const xx=x+i*.15,zz=z+Math.sin(i*2)*.08;
+      rock(P,H,xx,zz,.1+i*.014,.065,.075,i%2?'#b8b79a':'#9eaa94');
     }
   }
   function ledge(P,H,s,C){
@@ -332,7 +408,7 @@
   G.CloseWorld={draw(P,s,env={}){
     const M=G.CloseModel,C=M.config,H=(x,z)=>M.height(x,z);
     const q=P.quality||'standard';
-    keep(P,'world:terrain:nat1:'+q,()=>{terrain(P,H);coast(P,H);groundDressing(P,H,C);});
+    keep(P,'world:terrain:cove1:'+q,()=>{terrain(P,H);coast(P,H);groundDressing(P,H,C);cove(P,H);});
     keep(P,'world:nature-beds:'+q,()=>natureBeds(P,H));
     keep(P,'world:shore-ecology:'+q,()=>shoreEcology(P,H));
     keep(P,'world:ledge:'+Number(!!s.stairs)+':'+q,()=>ledge(P,H,s,C));

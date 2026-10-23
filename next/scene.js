@@ -403,9 +403,9 @@
   function draw(P,s,env={}){
     const q=P.quality||'standard';
     keep(P,'scene:house:'+Number(!!s.repaired)+':'+q,()=>house(P,s));
-    keep(P,'scene:workshop:'+q,()=>workshop(P));
+    keep(P,'scene:workshop:'+q,()=>P.tag('workshop',()=>workshop(P)));
     const level=s.shedLevel===1?1:0;
-    keep(P,'scene:shed-structure:'+level+':'+q,()=>shedStructure(P,level));
+    keep(P,'scene:shed-structure:'+level+':'+q,()=>P.tag('shed:logs',()=>shedStructure(P,level)));
     keep(P,'scene:shed-logs:'+level+':'+s.logs+':'+q,()=>shedLogs(P,s.logs,level));
     keep(P,'scene:shed-boards:'+level+':'+s.boards+':'+q,()=>shedBoards(P,s.boards,level));
     keep(P,'scene:lighthouse:'+q,()=>lighthouse(P));

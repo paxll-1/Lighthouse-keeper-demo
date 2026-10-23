@@ -79,7 +79,7 @@
     text($("context-title"),data.title);text($("context-detail"),data.detail);
     button.hidden=!data.action;button.dataset.action=data.tag||"";
     if(data.action)this.command(button,data.action);
-    $("pause-work").hidden=!data.job;text($("pause-work"),data.working?"Приостановить работу":"Остановиться");
+    $("pause-work").hidden=!data.working;text($("pause-work"),"Приостановить работу");
     $("context-key").hidden=!data.action;this.syncMode();this.invalidate();
   };
   Interface.prototype.panel=function(show,kind){

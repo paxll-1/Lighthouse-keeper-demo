@@ -138,26 +138,36 @@ canvas:focus-visible { outline-offset:-4px; }
 .coast-choice small { color:var(--ink-muted); font-size:.875rem; font-weight:400; line-height:1.4; }
 .coast-choice[aria-pressed="true"] > span::before { content:"✓ "; }
 
-/* Optical controls sit at the edges; the center remains the view itself. */
+/* A shallow double eyepiece frames the view without a central divider. Its
+   transparent aperture leaves the scene and all world gestures untouched. */
 .tool-panel { position:absolute; z-index:4; inset:0; color:var(--ink); pointer-events:none; }
-.tool-heading { position:absolute; top:calc(var(--space) + var(--safe-top)); left:calc(var(--space) + var(--safe-left)); right:calc(var(--space) + var(--safe-right)); display:grid; grid-template-columns:auto minmax(0,1fr) auto; align-items:start; gap:.5rem; pointer-events:none; }
+.binocular-mask { position:absolute; inset:0; pointer-events:none; }
+.binocular-mask svg { display:block; width:100%; height:100%; }
+.binocular-shade { fill:#12251e; fill-opacity:.76; }
+.binocular-rim { fill:none; stroke:#142d23; stroke-opacity:.85; stroke-width:2; }
+.tool-panel:not([data-mode="binoculars"]) .binocular-mask { display:none; }
+.tool-heading { position:absolute; z-index:1; top:calc(var(--space) + var(--safe-top)); left:calc(var(--space) + var(--safe-left)); right:calc(var(--space) + var(--safe-right)); display:grid; grid-template-columns:auto minmax(0,1fr); align-items:start; gap:.5rem; pointer-events:none; }
 .tool-heading button { pointer-events:auto; font-size:.875rem; }
-.tool-exit { display:flex; align-items:center; gap:.375rem; min-width:0; max-width:100%; }
+.tool-exit { display:flex; align-items:center; gap:.375rem; min-width:0; max-width:min(12rem,48vw); }
 .tool-exit svg { width:1.125rem; height:1.125rem; }
-.coast-point { justify-self:center; max-width:100%; margin:0; padding:.625rem .5rem; border-radius:var(--radius-small); background:var(--surface); font-size:.875rem; font-weight:550; line-height:1.4; text-align:center; overflow-wrap:anywhere; }
+.coast-point { justify-self:end; min-width:0; max-width:100%; margin:0; padding:.5rem .625rem; border:1px solid #9ba995; border-radius:var(--radius-small); color:#fbf7ec; background:#20372f; font-size:.875rem; font-weight:550; line-height:1.4; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
 .tool-scroll { position:absolute; inset:0; pointer-events:none; }
-.binocular-controls button { position:absolute; top:50%; display:grid; place-items:center; width:44px; height:44px; padding:10px; transform:translateY(-50%); pointer-events:auto; }
+.binocular-controls { position:absolute; bottom:calc(var(--space) + var(--safe-bottom)); left:50%; display:flex; align-items:center; gap:.25rem; width:max-content; max-width:calc(100% - 2 * var(--space) - var(--safe-left) - var(--safe-right)); padding:.25rem; border:1px solid #9ba995; border-radius:2rem; color:#fbf7ec; background:#20372f; transform:translateX(-50%); pointer-events:auto; }
+.binocular-controls button { display:grid; place-items:center; flex:0 0 44px; width:44px; height:44px; padding:10px; border-color:transparent; border-radius:50%; }
 .binocular-controls button svg { width:22px; height:22px; }
-#binocular-minus { left:calc(var(--space) + var(--safe-left)); }
-#binocular-plus { right:calc(var(--space) + var(--safe-right)); }
-.binocular-zoom { position:absolute; bottom:calc(var(--space) + var(--safe-bottom)); left:50%; padding:.375rem .625rem; border-radius:var(--radius-small); background:var(--surface); font-size:.875rem; font-variant-numeric:tabular-nums; text-align:center; transform:translateX(-50%); }
-.binocular-coast { position:absolute; right:calc(var(--space) + var(--safe-right)); bottom:calc(var(--space) + var(--safe-bottom)); width:min(23rem,calc(100% - 2 * var(--space) - var(--safe-left) - var(--safe-right))); max-height:calc(100% - 5rem - var(--safe-top) - var(--safe-bottom)); }
+.binocular-zoom { min-width:3.5rem; padding:0 .25rem; font-size:.875rem; font-weight:650; font-variant-numeric:tabular-nums; line-height:1.4; text-align:center; }
+.tool-panel[data-mode="binoculars"] :is(.tool-exit,.binocular-controls button) { color:#fbf7ec; background:#20372f; border-color:#9ba995; }
+.tool-panel[data-mode="binoculars"] :is(.tool-exit,.binocular-controls button):hover { color:#fbf7ec; background:#294a3c; border-color:#c6cfba; }
+.tool-panel[data-mode="binoculars"] :is(.tool-exit,.binocular-controls button):active { color:#fbf7ec; background:#14291f; border-color:#e0e5d4; }
+.tool-panel[data-mode="binoculars"] button:focus-visible { outline:3px solid #f4d484; outline-offset:3px; }
+.tool-panel[data-mode="binoculars"] .binocular-controls button[aria-disabled="true"] { color:#cbd2c4; background:#32443b; border-color:#9ba995; border-style:dashed; cursor:default; }
+/* Retained only for legacy app bindings; destinations are offered in the bag. */
+#binocular-coast, #binocular-places-toggle { display:none !important; }
 .coast-navigation { display:flex; gap:.5rem; margin-top:.75rem; }
 .coast-navigation button { flex:1; min-width:0; font-size:.875rem; }
 .tool-panel[data-mode="lantern"] .tool-heading { display:block; right:auto; max-width:calc(100% - 120px - var(--safe-left) - var(--safe-right)); }
 .tool-panel[data-mode="lantern"] :is(.coast-point,#binocular-places-toggle,.tool-scroll) { display:none; }
 #game:not([data-ui-mode="binoculars"]) .tool-panel:not([data-mode="lantern"]), #game:not([data-ui-mode="walk"]) .tool-panel[data-mode="lantern"] { display:none; }
-#game[data-ui-detail="places"] :is(#binocular-controls,#binocular-places-toggle,#coast-point) { display:none; }
 
 .action { position:absolute; z-index:3; display:grid; place-items:center; width:48px; height:48px; padding:11px; border:2px solid var(--pine); border-radius:50%; background:var(--surface); box-shadow:var(--shadow); transform:translate(-50%,-50%); }
 .action svg { width:24px; height:24px; }
@@ -199,11 +209,10 @@ html:fullscreen, html:-webkit-full-screen { background:#9dbab1; }
   .bottom-ui, .menu { left:calc(var(--space) + var(--safe-left)); width:auto; }
   .shed-panel, .gear-panel { max-height:min(70dvh,calc(100dvh - 2 * var(--space) - var(--safe-top) - var(--safe-bottom))); }
   .menu { max-height:min(82dvh,calc(100dvh - 2 * var(--space) - var(--safe-top) - var(--safe-bottom))); }
-  .binocular-coast { left:calc(var(--space) + var(--safe-left)); width:auto; max-height:70dvh; }
 }
 @media (orientation:landscape) {
   .bottom-ui { width:min(21rem,calc(50% - var(--space))); }
-  .menu, .binocular-coast { width:min(23rem,calc(50% - var(--space))); }
+  .menu { width:min(23rem,calc(50% - var(--space))); }
 }
 @media (max-height:430px) and (orientation:landscape) {
   :root { --space:10px; }
@@ -238,16 +247,6 @@ html:fullscreen, html:-webkit-full-screen { background:#9dbab1; }
 #game[data-menu="open"] .bench-ui, #game:is([data-panel="shed"],[data-panel="bag"],[data-panel="binoculars"]) .bench-ui { display:none; }
 
 #game:not([data-ui-mode="walk"]) .bench-ui { display:none; }
-
-/* Narrow optical header has a real second row. Enlarged/localized labels
-   cannot squeeze the current place into a one-character vertical column. */
-@media (max-width:480px) {
-  .tool-heading { display:flex; flex-wrap:wrap; justify-content:space-between; column-gap:.5rem; row-gap:0; }
-  .tool-heading::after { content:""; order:1; flex-basis:100%; height:0; }
-  .tool-exit { order:0; flex:0 0 auto; margin-bottom:.5rem; }
-  #binocular-places-toggle { order:0; flex:0 1 auto; max-width:100%; margin-bottom:.5rem; }
-  .coast-point { order:2; flex:0 1 auto; margin:0 auto; max-width:100%; }
-}
 
 /* Long detail labels flow as text, rather than three shrinking flex columns. */
 .detail-toggle { display:grid; grid-template-columns:minmax(0,1fr) auto; gap:.375rem; }

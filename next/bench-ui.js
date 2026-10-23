@@ -42,7 +42,7 @@
     if(old!==(owns?"active":""))view.invalidate();
     var visible=permitted&&(chosen||busy||done||!!data.hitRect);hide($("bench-ui"),!visible);
     attr($("bench-ui"),"data-state",busy?(working?"working":"travelling"):done?"result":chosen?"selected":"idle");
-    var confirm=permitted&&chosen&&!busy&&!done,pause=permitted&&busy,result=permitted&&done;
+    var confirm=permitted&&chosen&&!busy&&!done,pause=permitted&&working,result=permitted&&done;
     hide($("bench-prompt"),!confirm&&!pause);hide($("bench-confirm"),!confirm);hide($("bench-dismiss"),!confirm);hide($("bench-instruction"),!confirm);hide($("bench-pause"),!pause);hide($("bench-result"),!result);
     var description=data.description||{},reason=confirm?String(data.reason||""):"";
     text($("bench-reason"),reason);hide($("bench-reason"),!reason);
@@ -52,9 +52,9 @@
     attr($("bench-confirm"),"aria-label",(data.near?description.label||"Распилить бревно":"Подойти к верстаку и распилить бревно")+". "+(description.resultPreview||"Две доски останутся в руках."));
     attr($("bench-select"),"aria-pressed",chosen);attr($("bench-select"),"aria-expanded",confirm);
     if(confirm)attr($("bench-select"),"aria-describedby","bench-instruction");else if($("bench-select").hasAttribute("aria-describedby"))$("bench-select").removeAttribute("aria-describedby");
-    text($("bench-pause"),working?"Пауза":"Остановиться");
-    attr($("bench-pause"),"aria-label",working?"Приостановить распил":"Остановиться по пути к верстаку");
-    attr($("bench-pause"),"title",(working?"Приостановить распил":"Остановиться")+(view.keyboard()?" (Esc)":""));
+    text($("bench-pause"),"Пауза");
+    attr($("bench-pause"),"aria-label","Приостановить распил");
+    attr($("bench-pause"),"title","Приостановить распил"+(view.keyboard()?" (Esc)":""));
     text($("bench-work-status"),working?"Идёт распил. Сделанная часть сохранится при паузе.":"Смотритель идёт к верстаку. Можно остановиться.");
     var resultText=typeof data.done==="string"?data.done:done?"Распил завершён."+(data.cargo?" "+data.cargo+".":""):"";
     text($("bench-result"),resultText);

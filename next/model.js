@@ -63,7 +63,7 @@
   function validate(s){
     if(!s||[1,2,C.version].indexOf(s.version)<0)return false;
     var legacy=s.version<3,v1=s.version===1,bases=v1?C.trees.slice(0,3):C.trees,total=v1?3:C.trees.length+C.shore.length;
-    if(!s.avatar||!Number.isFinite(s.avatar.x)||!Number.isFinite(s.avatar.z)||!Number.isFinite(s.avatar.heading)||Math.abs(s.avatar.x)>18||Math.abs(s.avatar.z)>14)return false;
+    if(!s.avatar||!Number.isFinite(s.avatar.x)||!Number.isFinite(s.avatar.z)||!Number.isFinite(s.avatar.heading)||s.avatar.x< -18||s.avatar.x>(legacy?18:C.terrain.coastExtension.saveXMax)||Math.abs(s.avatar.z)>14)return false;
     // Preserve the old independent limits and accepted shapes before migration.
     if(legacy?(!Number.isInteger(s.logs)||s.logs<0||s.logs>total||!Number.isInteger(s.boards)||s.boards<0||s.boards>total*C.boardsPerLog):(!count(s.logs)||!count(s.boards)))return false;
     if(typeof s.repaired!=="boolean"||typeof s.lit!=="boolean"||!Number.isFinite(s.daylight)||s.daylight<0||s.daylight>1)return false;
@@ -94,20 +94,32 @@
     var l=C.terrain.ledge,list=[{x:-5,z:-4,rx:2.3,rz:1.8},{x:3.8,z:-4.3,rx:1.8,rz:1.3},{x:3.8,z:-1.6,rx:1.65,rz:.72},{x:10,z:-7,rx:1.1,rz:1.1},{x:C.seat.x,z:C.seat.z,rx:.35,rz:1.2}];
     [[l.xMin,l.gapMin],[l.gapMax,l.xMax]].forEach(function(r){list.push({x:(r[0]+r[1])/2,z:l.z,rx:(r[1]-r[0])/2,rz:l.thickness});});
     if(!s.stairs)list.push({x:(l.gapMin+l.gapMax)/2,z:l.z,rx:(l.gapMax-l.gapMin)/2,rz:l.thickness});
-    return list.concat(s.trees.filter(function(t){return !t.felled;}).map(function(t){return {x:t.x,z:t.z,rx:.42,rz:.42};}));
+    var pool=C.terrain.coastExtension.pool;
+    // Match the visible water with the usual .23m foot clearance.
+    list.push({x:pool.x,z:pool.z,rx:pool.rx,rz:pool.rz});
+    return list.concat(s.trees.filter(function(t){return !t.felled;}).map(function(t){return {x:t.x,z:t.z,rx:.42,rz:.42};}),C.terrain.coastExtension.rocks);
   }
+  function inExtension(x,z){
+    var v=C.terrain.coastExtension.outline,inside=false;
+    for(var i=0,j=v.length-1;i<v.length;j=i++){
+      var a=v[j],b=v[i],cross=(x-a[0])*(b[1]-a[1])-(z-a[1])*(b[0]-a[0]);
+      if(Math.abs(cross)<1e-9&&x>=Math.min(a[0],b[0])&&x<=Math.max(a[0],b[0])&&z>=Math.min(a[1],b[1])&&z<=Math.max(a[1],b[1]))return true;
+      if((a[1]>z)!==(b[1]>z)&&x<(b[0]-a[0])*(z-a[1])/(b[1]-a[1])+a[0])inside=!inside;
+    }return inside;
+  }
+  function inTerrain(x,z){return (x*x)/(16*16)+(z*z)/(12*12)<=.91||inExtension(x,z);}
   function walkable(s,x,z){
-    if((x*x)/(16*16)+(z*z)/(12*12)>.91)return false;
+    if(!inTerrain(x,z))return false;
     return !obstacles(s).some(function(o){return Math.abs(x-o.x)<o.rx+.23&&Math.abs(z-o.z)<o.rz+.23;});
   }
   function path(s,from,to){
-    var q=.5,W=65,H=49,at=function(x,z){return [Math.round((x+16)/q),Math.round((z+12)/q)];},world=function(p){return {x:p[0]*q-16,z:p[1]*q-12};};
+    var q=.5,bounds=C.terrain.coastExtension.bounds,W=Math.round((bounds.xMax-bounds.xMin)/q)+1,H=Math.round((bounds.zMax-bounds.zMin)/q)+1,at=function(x,z){return [Math.round((x-bounds.xMin)/q),Math.round((z-bounds.zMin)/q)];},world=function(p){return {x:p[0]*q+bounds.xMin,z:p[1]*q+bounds.zMin};};
     var a=at(from.x,from.z),b=at(to.x,to.z),key=function(p){return p[0]+","+p[1];};
     function free(p){var v=world(p);return p[0]>=0&&p[0]<W&&p[1]>=0&&p[1]<H&&walkable(s,v.x,v.z);}
     if(!free(b)||(walkable(s,to.x,to.z)&&!clear(s,world(b),to))){var found=null,best=Infinity;for(var dx=-8;dx<=8;dx++)for(var dz=-8;dz<=8;dz++){var p=[b[0]+dx,b[1]+dz],wp=world(p),d=Math.hypot(wp.x-to.x,wp.z-to.z);if(free(p)&&d<best&&(!walkable(s,to.x,to.z)||clear(s,wp,to))){found=p;best=d;}}if(!found)return null;b=found;}
     if(!free(a)||!clear(s,from,world(a))){var start=null,near=Infinity;for(var sx=-8;sx<=8;sx++)for(var sz=-8;sz<=8;sz++){var ap=[a[0]+sx,a[1]+sz],wp=world(ap),ad=Math.hypot(wp.x-from.x,wp.z-from.z);if(free(ap)&&ad<near&&clear(s,from,wp)){start=ap;near=ad;}}if(!start)return null;a=start;}
     var open=[a],prev={},score={};score[key(a)]=0;var goal=key(b),closed=new Set(),steps=0;
-    while(open.length&&steps++<3500){
+    while(open.length&&steps++<W*H){
       var index=0,best=Infinity;
       for(var i=0;i<open.length;i++){var p=open[i],f=score[key(p)]+Math.hypot(p[0]-b[0],p[1]-b[1]);if(f<best){best=f;index=i;}}
       var here=open.splice(index,1)[0],k=key(here);
@@ -127,6 +139,23 @@
   }
   function clear(s,a,b){
     if(!walkable(s,a.x,a.z)||!walkable(s,b.x,b.z))return false;
+    // Endpoints suffice only inside the old convex island. Split every other
+    // segment at exact ellipse/polygon crossings, then check all open intervals.
+    // This also protects A* smoothing from cutting across the new cove's inlet.
+    var old=function(p){return p.x*p.x/256+p.z*p.z/144<=.91;};
+    if(!old(a)||!old(b)){
+      var dx=b.x-a.x,dz=b.z-a.z,cuts=[0,1],v=C.terrain.coastExtension.outline;
+      var qa=dx*dx/256+dz*dz/144,qb=2*(a.x*dx/256+a.z*dz/144),qc=a.x*a.x/256+a.z*a.z/144-.91,disc=qb*qb-4*qa*qc;
+      if(qa>0&&disc>=0){var root=Math.sqrt(disc);cuts.push((-qb-root)/(2*qa),(-qb+root)/(2*qa));}
+      for(var i=0;i<v.length;i++){
+        var p=v[i],q=v[(i+1)%v.length],ex=q[0]-p[0],ez=q[1]-p[1],den=dx*ez-dz*ex;
+        if(Math.abs(den)<1e-12)continue;
+        var t=((p[0]-a.x)*ez-(p[1]-a.z)*ex)/den,u=((p[0]-a.x)*dz-(p[1]-a.z)*dx)/den;
+        if(u>=0&&u<=1)cuts.push(t);
+      }
+      cuts=cuts.filter(function(t){return t>=0&&t<=1;}).sort(function(x,y){return x-y;});
+      for(var j=1;j<cuts.length;j++){var mid=(cuts[j-1]+cuts[j])/2;if(!inTerrain(a.x+dx*mid,a.z+dz*mid))return false;}
+    }
     return !obstacles(s).some(function(o){
       var lo=0,hi=1;
       for(var i=0;i<2;i++){var k=i?"z":"x",r=(i?o.rz:o.rx)+.23-.000001,min=o[k]-r,max=o[k]+r,d=b[k]-a[k];
