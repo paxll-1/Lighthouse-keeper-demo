@@ -1,9 +1,8 @@
-// Session presentation only. App owns modes, focus, input, camera and all progress.
-// Bind the static IDs or delegate [data-coast-action][data-coast-point] in app.
+// Session presentation only. The controller owns modes and app binds actions.
 (function(G){
   "use strict";
   var zoomFormat=new Intl.NumberFormat("ru",{maximumFractionDigits:1});
-  var ids=Object.freeze({bag:"bag",bagPanel:"bag-panel",bagClose:"bag-close",bagStatus:"bag-status",lantern:"gear-lantern",binoculars:"gear-binoculars",bagCargo:"bag-cargo",bagPlaces:"bag-places",toolPanel:"tool-panel",toolClose:"tool-close",toolTitle:"tool-title",toolStatus:"tool-status",zoom:"binocular-zoom",minus:"binocular-minus",plus:"binocular-plus",previous:"coast-previous",next:"coast-next",point:"coast-point",points:"binocular-points"});
+  var ids=Object.freeze({bag:"bag",bagPanel:"bag-panel",bagClose:"bag-close",bagStatus:"bag-status",lantern:"gear-lantern",binoculars:"gear-binoculars",bagCargo:"bag-cargo",bagPlaces:"bag-places",bagPlacesToggle:"bag-places-toggle",bagPlacesBack:"bag-places-back",toolPanel:"tool-panel",toolClose:"tool-close",toolTitle:"tool-title",toolStatus:"tool-status",zoom:"binocular-zoom",minus:"binocular-minus",plus:"binocular-plus",previous:"coast-previous",next:"coast-next",point:"coast-point",points:"binocular-points",placesToggle:"binocular-places-toggle",placesBack:"binocular-places-back"});
   function $(id){return document.getElementById(id);}
   function text(node,value){value=String(value==null?"":value);if(node.textContent===value)return false;node.textContent=value;return true;}
   function attr(node,key,value){value=String(value);if(node.getAttribute(key)!==value)node.setAttribute(key,value);}
@@ -23,49 +22,54 @@
       var button=document.createElement("button");button.type="button";button.className="coast-choice";
       button.id=(action==="walk"?"bag-place-":"binocular-point-")+pointToken(point.id);
       button.dataset.coastAction=action;button.dataset.coastPoint=point.id;
-      var label=document.createElement("span");label.textContent=action==="walk"?"Пройти к месту «"+point.name+"»":"Посмотреть: "+point.name;button.append(label);
+      var label=document.createElement("span");label.textContent=action==="walk"?"Пройти: "+point.name:point.name;button.append(label);
       if(action==="walk"&&point.detail){var detail=document.createElement("small");detail.textContent=point.detail;button.append(detail);}
-      if(action==="look")button.setAttribute("aria-pressed","false");
-      fragment.append(button);
+      if(action==="look")button.setAttribute("aria-pressed","false");fragment.append(button);
     });
     node.replaceChildren(fragment);
   }
-  function Gear(view){this.view=view;this.pointsKey=null;this.bagWasOpen=false;}
+  function Gear(view){this.view=view;this.pointsKey=null;this.bagWasOpen=false;this.detail=null;}
   Gear.ids=ids;
   Gear.prototype.render=function(data){
-    data=data||{};var view=this.view,changed=false,bagOpen=!!data.bagOpen;
+    data=data||{};var view=this.view,changed=false;
     var mode=data.mode==="lantern"||data.mode==="binoculars"?data.mode:"none";
+    // Equipment never navigates: panel() reads the controller when supplied.
+    attr(view.root,"data-gear",mode);attr($("tool-panel"),"data-mode",mode);
+    var intended=data.bagOpen?"bag":mode;view.panel(intended!=="none",intended);
+    var snapshot=view.snapshot?view.snapshot():{mode:data.bagOpen?"bag":mode==="binoculars"?"binoculars":"walk",detail:null};
+    var bagOpen=snapshot.mode==="bag",bagPlaces=bagOpen&&snapshot.detail==="bag-places",places=snapshot.mode==="binoculars"&&snapshot.detail==="places";
     var points=(Array.isArray(data.points)?data.points:[]).filter(function(p){return p&&p.id!=null;}).slice(0,3).map(function(p){return {id:String(p.id),name:String(p.name||p.label||"Берег"),detail:String(p.detail||"")};});
     var pointId=data.point&&typeof data.point==="object"?String(data.point.id):data.point==null?"":String(data.point);
     var point=points.find(function(p){return p.id===pointId;})||null;
-    var panel=bagOpen?"bag":mode;
-    if(panel!=="none")view.panel(true,panel);
-    else if(["bag","lantern","binoculars"].indexOf(view.root.dataset.panel)>=0)view.panel(false);
-    attr(view.root,"data-gear",mode);attr($("tool-panel"),"data-mode",mode);
     attr($("bag"),"aria-expanded",bagOpen);attr($("bag"),"aria-pressed",bagOpen||mode!=="none");
     attr($("bag"),"aria-label",bagOpen?"Закрыть сумку смотрителя":"Сумка смотрителя");
     attr($("bag"),"title",(bagOpen?"Закрыть сумку":"Сумка смотрителя")+(view.keyboard()?" (B)":""));
-    changed=text($("bag-status"),data.status||"Инструменты для спокойного осмотра. Груз остаётся с тобой.")||changed;
-    if(bagOpen&&!this.bagWasOpen)$("bag-scroll").scrollTop=0;
-    this.bagWasOpen=bagOpen;
+    changed=text($("bag-title"),bagPlaces?"Прогулка":"Сумка")||changed;
+    changed=text($("bag-status"),data.status||"")||changed;changed=hidden($("bag-status"),!data.status)||changed;
+    if(bagOpen&&(!this.bagWasOpen||snapshot.detail!==this.detail))$("bag-scroll").scrollTop=0;
+    this.bagWasOpen=bagOpen;this.detail=snapshot.detail;
     changed=text($("bag-cargo"),cargoLabel(data.cargo))||changed;
     var pointsKey=JSON.stringify(points);
     if(this.pointsKey!==pointsKey){choices($("bag-places"),points,"walk");choices($("binocular-points"),points,"look");this.pointsKey=pointsKey;changed=true;}
-    changed=hidden($("bag-coast"),!points.length)||changed;
-    changed=hidden($("binocular-coast"),!points.length)||changed;
-    var title=mode==="lantern"?"Фонарь":"Бинокль";
-    var status=data.status||(mode==="lantern"?"Мягкий свет у пояса.":point?point.name:"Спокойный взгляд с места.");
-    changed=text($("tool-title"),title)||changed;changed=text($("tool-status"),status)||changed;
-    changed=text($("tool-close-label"),mode==="lantern"?"Убрать":"Выйти")||changed;
+    changed=hidden($("bag-places-toggle"),!points.length)||changed;
+    changed=hidden($("bag-main"),bagPlaces)||changed;changed=hidden($("bag-coast"),!bagPlaces)||changed;changed=hidden($("bag-places-back"),!bagPlaces)||changed;
+    attr($("bag-places-toggle"),"aria-expanded",bagPlaces);
+    changed=text($("tool-title"),mode==="lantern"?"Фонарь":"Бинокль")||changed;
+    // The current point has exactly one visible name, in coast-point.
+    changed=text($("tool-status"),"")||changed;changed=hidden($("tool-status"),true)||changed;
+    changed=text($("tool-close-label"),mode==="lantern"?"Убрать фонарь":"Выйти")||changed;
     attr($("tool-close"),"aria-label",mode==="lantern"?"Убрать фонарь":"Выйти из бинокля");
     attr($("tool-close"),"title",(mode==="lantern"?"Убрать фонарь":"Выйти из бинокля")+(view.keyboard()?" (Esc)":""));
     changed=hidden($("tool-scroll"),mode!=="binoculars")||changed;
+    changed=hidden($("binocular-coast"),!places)||changed;
+    changed=hidden($("binocular-places-toggle"),!points.length||places||mode!=="binoculars")||changed;
+    attr($("binocular-places-toggle"),"aria-expanded",places);
     var min=Number.isFinite(data.minZoom)?data.minZoom:1,max=Number.isFinite(data.maxZoom)?Math.max(min,data.maxZoom):4;
     var zoom=Number.isFinite(data.zoom)?data.zoom:min;
     text($("binocular-zoom"),zoomFormat.format(zoom)+"×");
     attr($("binocular-minus"),"aria-disabled",zoom<=min+.001);attr($("binocular-plus"),"aria-disabled",zoom>=max-.001);
     attr($("coast-previous"),"aria-disabled",points.length<2);attr($("coast-next"),"aria-disabled",points.length<2);
-    changed=text($("coast-point"),point?point.name:"Выбери место")||changed;
+    changed=text($("coast-point"),point?point.name:"Свободный взгляд")||changed;
     $("binocular-points").querySelectorAll("[data-coast-point]").forEach(function(button){var selected=button.dataset.coastPoint===pointId;attr(button,"aria-pressed",selected);attr(button,"data-state",selected?"selected":"normal");});
     if(changed)view.invalidate();
   };

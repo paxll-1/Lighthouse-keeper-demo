@@ -1,9 +1,7 @@
-# Lighthouse keeper — playable demo
+# Маяк · Демка
 
-Build: `living-island-2026-10-22-r2`. Open `index.html` in a modern browser. The previous stable control is at `r2/index.html`.
+Единственная актуальная игровая демка: https://paxll-1.github.io/Lighthouse-keeper-demo/next/
 
-Touch the ground to walk. Approach an object, then press its action icon to work. Drag to turn the camera, pinch to zoom. Fullscreen is available where supported by the browser.
+Старые адреса перенаправляют на неё. Архивные игровые файлы убраны из текущей ветки; прежние версии сохраняются в истории Git. Нужен современный браузер с WebGL2. Прогресс хранится локально в браузере.
 
-The menu includes sound, reduced motion, lighter quality and optional local FPS diagnostics. No game telemetry is sent. Progress is stored in this browser when local storage is available. Different site origins have separate progress.
-
-This package contains only the game.
+Three.js: MIT, лицензия в `next/vendor/THREE-LICENSE.txt`.

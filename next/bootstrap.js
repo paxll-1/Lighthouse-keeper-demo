@@ -1,6 +1,6 @@
 // Start the game owner only after the renderer can create WebGL2. The storage
 // experiment keeps a separate save branch; unsupported browsers touch neither.
-const BUILD = 'island-bench-2026-10-23-r1';
+const BUILD = 'island-mobile-modes-2026-10-23-r1';
 globalThis.ThreeIslandPreview = { build: BUILD, ready: false, error: null };
 const status = document.getElementById('boot-status');
 function failed(error) {
@@ -8,9 +8,9 @@ function failed(error) {
   status.hidden = false;
   document.getElementById('game').setAttribute('aria-busy', 'false');
   document.getElementById('boot-message').textContent = error?.name === 'WebGL2Unavailable'
-    ? 'Новая графика недоступна: браузер не предоставил WebGL2. Прежняя демка остаётся доступной со своим сохранением; прогресс пробы со складом хранится отдельно.'
-    : 'Не удалось запустить новую пробу. Можно открыть прежнюю демку со своим сохранением; прогресс пробы со складом хранится отдельно.';
-  document.getElementById('legacy-link').hidden = false;
+    ? 'Для демки нужен WebGL2. Этот браузер его не предоставил. Попробуй современный браузер с включённым аппаратным ускорением. Сохранение не изменено.'
+    : 'Не удалось запустить демку. Попробуй обновить страницу. Сохранение не изменено.';
+  document.getElementById('legacy-link').hidden = true;
 }
 try {
   await import('./config.js?build='+BUILD);
@@ -20,6 +20,7 @@ try {
   await import('./world.js?build='+BUILD);
   await import('./scene.js?build='+BUILD);
   await import('./ui.js?build='+BUILD);
+  await import('./ui-state.js?build='+BUILD);
   await import('./interface.js?build='+BUILD);
   await import('./gear.js?build='+BUILD);
   await import('./bench-ui.js?build='+BUILD);

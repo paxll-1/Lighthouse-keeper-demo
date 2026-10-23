@@ -1,6 +1,6 @@
 (function(){
   "use strict";
-  var U=CloseUI,view=new CloseInterface(),M=CloseModel,C=M.config,$=function(id){return document.getElementById(id);},canvas=$("world"),P=new CloseRenderer(canvas);
+  var uiModes=new CloseUIModes({onChange:modeChanged,onPending:modePending}),U=CloseUI,view=new CloseInterface(uiModes),M=CloseModel,C=M.config,$=function(id){return document.getElementById(id);},canvas=$("world"),P=new CloseRenderer(canvas);
   var state=M.create(),job=null,hover=null,selectedTag=null,pointer={x:0,y:0},last=performance.now(),clock=0,walkPhase=0,stepSound=0,workSound=-1;
   var camera={x:C.start.x,y:.8,z:C.start.z,distance:C.camera.distance,yaw:C.camera.yaw,pitch:C.camera.pitch},distance=C.camera.distance,yaw=C.camera.yaw,pitch=C.camera.pitch,overview=false;
   var keys=new Set(),touches=new Map(),gesture=null,pinch=null,night=0,toastTimer,saveTimer=0;
@@ -8,7 +8,7 @@
   var audio=null,master=null,ambient=null,windFilter=null,muted=false,lastSaved=0,audioAttempted=false,audioContexts=0,audioTick=-1,ambientGains=null,ambientLevels={wind:0,leaves:0,surf:0};
   var sitting=false,sitBlend=0,visited=new Set(),placeTimer=0,saveBlocked=false,saveMemoryOnly=false,shedOpen=false,shedRevealAt=0,panelNotice=null;
   var gearUI=new CloseGear(view),coast=CloseCoast.create(),kit={bagOpen:false,mode:"none",zoom:2,point:CloseCoast.points[0].id,note:""},savedNormal=null,bagCamera=null,optics={eye:null,yaw:0,pitch:.1};
-  var benchProbe=new CloseBenchProbe(view),benchEnabled=new URLSearchParams(location.search).get("workbench")!=="classic",benchState={reason:"",reasonUntil:0,result:"",resultUntil:0,selectedAt:-Infinity,confirmedAt:-Infinity,confirmPoint:null,focused:false},benchHit=null;
+  var benchProbe=new CloseBenchProbe(view),benchEnabled=new URLSearchParams(location.search).get("workbench")!=="classic",benchState={reason:"",reasonUntil:0,result:"",resultUntil:0,selectedAt:-Infinity,confirmedAt:-Infinity,confirmPoint:null,focused:false},benchHit=null,benchPointer=null,benchPointerClickUntil=0;
   var hostEnvelope=Object.assign({},globalThis.openai&&globalThis.openai.widgetState||{});
   var motionPreference=matchMedia("(prefers-reduced-motion: reduce)"),reducedMotion=motionPreference.matches,manualCamera=false,resultView=null,contextKey="",lastFrame=0,bottomHeight=110,coarsePointer=matchMedia("(pointer:coarse)").matches,fullscreenPending=false;
   var PRESENTATION_KEY="lighthouse.presentation.v1",motionOverride=null,quality="standard",islandTime=0,wind={x:.86,z:.5,strength:.25},perfStart=performance.now(),perfFrames=0,perfTotal=0,perf={fps:null,renderMs:null,sampleMs:0,frames:0},cpuSamples=[],intervalSamples=[],sampleCursor=0;
@@ -98,20 +98,45 @@
   function materialText(n,kind,accusative){return U.material(n,kind,accusative);}
   function cargoText(){return U.cargo(state);}
   function nearShed(){return Object.keys(C.shed.zones).some(function(k){var q=C.shed.zones[k];return Math.hypot(state.avatar.x-q.x,state.avatar.z-q.z)<=C.interactionReach&&M.clear(state,state.avatar,q);});}
-  function openShed(){if(saveBlocked||job||!nearShed())return;closeTools(false);shedOpen=true;shedRevealAt=0;keys.clear();refresh();updateShedPanel();var first=["shed-store","shed-take-logs","shed-take-boards","shed-upgrade","shed-close"].find(function(id){return $(id).getAttribute("aria-disabled")!=="true";});$(first).focus({preventScroll:true});}
+  function clearUIInput(){keys.clear();touches.clear();gesture=null;pinch=null;hover=null;}
+  function modePending(){if(!view)return;clearUIInput();view.syncMode();view.invalidate();}
+  function modeChanged(next,previous,meta){
+    if(!view||!kit)return;
+    clearUIInput();
+    if(previous.mode==="binoculars"&&next.mode!=="binoculars"){restoreNormal(savedNormal);savedNormal=null;kit.mode="none";P.observation=null;}
+    if(previous.mode==="bag"&&next.mode!=="bag"){if(next.mode!=="binoculars")restoreNormal(bagCamera);bagCamera=null;}
+    kit.bagOpen=next.mode==="bag";shedOpen=next.mode==="shed";
+    if(job&&(next.mode!=="walk"||previous.mode==="shed"))pause(true);
+    if(previous.mode==="shed"&&next.mode!=="shed")panelNotice=null;
+    [["help-dialog","help"],["restart-dialog","confirm"]].forEach(function(pair){var d=$(pair[0]);if(next.mode===pair[1]){if(!d.open)d.showModal();}else if(d.open)d.close();});
+    view.syncMode();renderGear();view.invalidate();
+    var focus=next.mode==="bag"?"bag-close":next.mode==="menu"?"menu-close":next.mode==="help"?"help-close":next.mode==="confirm"?"restart-cancel":next.mode==="shed"?(next.detail?"shed-details-back":"shed-close"):next.mode==="binoculars"?(next.detail?"binocular-places-back":"world"):"world";
+    if(meta&&meta.reason==="detail"&&next.mode==="bag")focus="bag-places-back";
+    if($(focus))$(focus).focus({preventScroll:true});
+    if(next.mode==="help"&&previous.mode!=="help"){$("help-dialog").scrollTop=0;$("help-dialog").querySelector(".dialog-content").scrollTop=0;}
+  }
+  function openShed(){
+    if(saveBlocked||job||!nearShed()||uiModes.snapshot().pending)return;
+    closeTools(false,true);uiModes.open("shed");shedRevealAt=0;clearUIInput();refresh();updateShedPanel();
+    var first=["shed-store","shed-take-boards","shed-take-logs","shed-close"].find(function(id){return $(id).getClientRects().length&&$(id).getAttribute("aria-disabled")!=="true";});if(first)$(first).focus({preventScroll:true});
+  }
   function coastPoint(id){return CloseCoast.points.find(function(p){return p.id===(id||kit.point);})||CloseCoast.points[0];}
   function captureNormal(){return {camera:Object.assign({},camera),targetDistance:distance,targetYaw:yaw,targetPitch:pitch,overview:overview,manual:manualCamera};}
   function restoreNormal(saved){if(!saved)return;Object.assign(camera,saved.camera);distance=saved.targetDistance;yaw=saved.targetYaw;pitch=saved.targetPitch;overview=saved.overview;manualCamera=saved.manual;$("overview").setAttribute("aria-pressed",String(overview));}
   function renderGear(){gearUI.render({bagOpen:kit.bagOpen,mode:kit.mode,zoom:kit.zoom,minZoom:1,maxZoom:3,point:coastPoint(),cargo:cargoText(),points:CloseCoast.points,status:kit.note});}
-  function closeTools(focus){
+  function closeTools(focus,keepUI){
     var wasOpen=kit.bagOpen||kit.mode!=="none";
     if(kit.mode==="binoculars")restoreNormal(savedNormal);else if(kit.bagOpen)restoreNormal(bagCamera);
-    kit.bagOpen=false;kit.mode="none";kit.note="";savedNormal=null;bagCamera=null;P.observation=null;P.lantern=null;keys.clear();touches.clear();gesture=null;pinch=null;renderGear();view.invalidate();
+    kit.mode="none";kit.note="";savedNormal=null;bagCamera=null;P.observation=null;P.lantern=null;clearUIInput();
+    if(!keepUI&&(uiModes.is("bag")||uiModes.is("binoculars")))uiModes.reset("tool-close");
+    kit.bagOpen=uiModes.is("bag");renderGear();view.invalidate();
     if(wasOpen&&focus!==false)canvas.focus({preventScroll:true});
   }
   function openBag(){
-    unlock();if(kit.bagOpen){closeTools();return;}var wasWorking=!!job;closeTools(false);bagCamera=captureNormal();pause(true);keys.clear();shedOpen=false;closeMenu();hover=null;
-    kit.bagOpen=true;kit.note=wasWorking?"Дело приостановлено. Сделанная часть и груз сохранены. Ниже — места для прогулки.":"Инструменты и три места для прогулки. Груз остаётся с тобой.";renderGear();refresh();$("bag-close").focus({preventScroll:true});
+    if(uiModes.snapshot().pending)return;
+    unlock();if(uiModes.is("bag")){uiModes.back("bag-toggle");return;}
+    var wasWorking=!!job,normal=savedNormal||bagCamera||captureNormal();closeTools(false,true);bagCamera=normal;pause(true);clearUIInput();
+    kit.note=wasWorking?"Работа приостановлена.":"Выбери инструмент или место для прогулки.";uiModes.open("bag");renderGear();refresh();
   }
   function aimPoint(id){
     var point=coastPoint(id);kit.point=point.id;var eye=optics.eye;
@@ -119,9 +144,10 @@
     renderGear();
   }
   function useTool(mode){
-    if(mode!=="lantern"&&mode!=="binoculars")return;
-    var normal=bagCamera||savedNormal||captureNormal();closeTools(false);restoreNormal(normal);pause(true);keys.clear();shedOpen=false;closeMenu();hover=null;resultView=null;kit.mode=mode;kit.note="";
-    if(mode==="binoculars"){savedNormal=normal;var a=actorPosition();optics.eye=[a.x,M.height(a.x,a.z)+1.65,a.z];aimPoint(kit.point);}
+    if((mode!=="lantern"&&mode!=="binoculars")||uiModes.snapshot().pending)return;
+    var normal=bagCamera||savedNormal||captureNormal();closeTools(false,true);restoreNormal(normal);pause(true);clearUIInput();resultView=null;kit.mode=mode;kit.note="";
+    if(mode==="binoculars"){savedNormal=normal;var a=actorPosition();optics.eye=[a.x,M.height(a.x,a.z)+1.65,a.z];uiModes.open("binoculars");aimPoint(kit.point);}
+    else uiModes.reset("lantern-equip");
     renderGear();view.invalidate();canvas.focus({preventScroll:true});
   }
   function changeZoom(delta){if(kit.mode!=="binoculars")return;kit.zoom=Math.max(1,Math.min(3,kit.zoom+delta));renderGear();}
@@ -129,8 +155,11 @@
   function walkCoast(id){var point=coastPoint(id);if(saveBlocked){notify("Сохранение не прочитано. Оно не изменено.");return;}kit.point=point.id;closeTools(false);selectedTag=null;walk(point.stand,null);notify(point.name+". Можно остановиться и достать бинокль из сумки.");}
   function observationCamera(){var safe=view.layout();P.observation={eye:optics.eye,yaw:optics.yaw,pitch:optics.pitch,zoom:kit.zoom,centerX:safe.centerX,centerY:safe.centerY};}
   function nearBench(){var a=M.info(state,"saw");return Math.hypot(state.avatar.x-a.x,state.avatar.z-a.z)<=C.interactionReach&&M.clear(state,state.avatar,a);}
-  function benchPermitted(){return !saveBlocked&&!kit.bagOpen&&kit.mode!=="binoculars"&&!shedOpen&&$("menu").hidden&&!document.querySelector("dialog[open]")&&!(job&&job.id&&job.id!=="saw");}
-  function selectBench(){if(!benchEnabled||!benchPermitted()||job&&job.id==="saw")return;benchState.reason="";benchState.result="";benchState.focused=false;approach("bench");benchState.selectedAt=clock;renderBench(contextAction());}
+  function benchPermitted(){return !saveBlocked&&!kit.bagOpen&&kit.mode!=="binoculars"&&!shedOpen&&uiModes.is("walk")&&!uiModes.snapshot().pending&&$("menu").hidden&&!document.querySelector("dialog[open]")&&!(job&&job.id&&job.id!=="saw");}
+  function selectBench(e){if(!benchEnabled||!benchPermitted()||job&&job.id==="saw")return;
+    // The broad object zone must not steal another visible world target.
+    if(e&&e.detail>0){var point=local(e),tag=e.worldTag||P.pick(point.x,point.y);if(tag&&tag!=="bench"&&actionForTag(tag)){benchState.focused=false;canvas.focus({preventScroll:true});approach(tag);return;}}
+    benchState.reason="";benchState.result="";benchState.focused=false;approach("bench");benchState.selectedAt=clock;renderBench(contextAction());}
   function confirmBench(e){
     if(!benchEnabled||!benchPermitted()||job&&job.id==="saw")return;
     selectedTag="bench";var d=U.action(state,"saw");
@@ -157,7 +186,7 @@
     if(job){if(job.working)state.progress[job.id]=Math.min(.999999,job.elapsed/job.action.seconds);job=null;persist();}
   }
   function walk(to,intent){
-    if(saveBlocked)return;if(kit.bagOpen||kit.mode==="binoculars"||intent)closeTools(false);sitting=false;resultView=null;shedOpen=false;
+    if(saveBlocked)return;if(kit.bagOpen||kit.mode==="binoculars"||intent)closeTools(false);sitting=false;resultView=null;if(uiModes.is("shed")&&!(intent&&["store","take","upgrade"].indexOf(intent.type)>=0))uiModes.reset("walk");shedOpen=uiModes.is("shed");
     var path=Math.hypot(state.avatar.x-to.x,state.avatar.z-to.z)<.001?[]:M.path(state,state.avatar,to);if(!path){notify("Здесь не пройти. Выбери тропинку рядом.");return;}
     clearNotice();pause(true);job={id:intent?intent.id:null,action:intent,path:path,working:false,elapsed:0};overview=false;$("overview").setAttribute("aria-pressed","false");
     persist();refresh();
@@ -194,13 +223,14 @@
       observationCamera();P.camera(camera,camera.distance,camera.yaw,camera.pitch);return false;
     }
     P.observation=null;
+    if(uiModes.blocksWorld())keys.clear();
     var kx=(keys.has("ArrowRight")||keys.has("KeyD")?1:0)-(keys.has("ArrowLeft")||keys.has("KeyA")?1:0),kz=(keys.has("ArrowDown")||keys.has("KeyS")?1:0)-(keys.has("ArrowUp")||keys.has("KeyW")?1:0),moving=false;
     function moveTo(x,z){
       var travelled=Math.hypot(x-state.avatar.x,z-state.avatar.z);
       if(travelled>0){state.avatar.heading=Math.atan2(x-state.avatar.x,z-state.avatar.z);state.avatar.x=x;state.avatar.z=z;state.daylight=Math.min(.81,state.daylight+travelled*C.daylightPerMeter);walkPhase+=travelled*4;moving=true;}
     }
     if(kx||kz){
-      if(saveBlocked){keys.clear();return false;}sitting=false;resultView=null;if(benchEnabled&&selectedTag==="bench"){selectedTag=null;benchState.reason="";benchState.result="";}
+      if(saveBlocked||uiModes.blocksWorld()){keys.clear();return false;}sitting=false;resultView=null;selectedTag=null;benchState.reason="";benchState.result="";
       if(job)pause(true);
       var length=Math.hypot(kx,kz),dx=(Math.cos(yaw)*kx+Math.sin(yaw)*kz)/length*C.walkSpeed*dt,dz=(-Math.sin(yaw)*kx+Math.cos(yaw)*kz)/length*C.walkSpeed*dt;
       var x=state.avatar.x,z=state.avatar.z;
@@ -323,7 +353,7 @@
     if(job&&job.path.length){var dest=job.path[job.path.length-1];P.ring(dest.x,dest.z,"#f5df9b9e",.33,M.height(dest.x,dest.z)+.045);}
     if(night>.05)P.beam([10,5.65,-7],[24+Math.sin(islandTime*.14)*10,3,-19],night);
     var nearby=contextAction(),screen=nearby?P.project(targetPoint(nearby.tag)):null,button=$("act"),safe=view.layout();
-    button.hidden=!screen;
+    button.hidden=!screen||!uiModes.is("walk")||!selectedTag||nearby&&nearby.tag!==selectedTag;
     if(nearby&&screen){
       var bx=Math.max(safe.left+24,Math.min(safe.right-24,screen.x)),by=Math.max(safe.top+24,Math.min(safe.bottom-24,screen.y-26));
       var head=P.project([actor.x,M.height(actor.x,actor.z)+1.9,actor.z]),feet=P.project([actor.x,M.height(actor.x,actor.z),actor.z]);
@@ -336,6 +366,7 @@
     var p=P.project([state.avatar.x,M.height(state.avatar.x,state.avatar.z)+2.03,state.avatar.z]);$("working").hidden=!job||!job.working||!p;
     if(job&&job.working&&p){$("working").style.left=Math.max(safe.left+43,Math.min(safe.right-43,p.x))+"px";$("working").style.top=Math.max(safe.top+8,Math.min(safe.bottom-8,p.y-14))+"px";$("working").setAttribute("aria-label",U.action(state,job.id).label);$("working").setAttribute("aria-valuenow",String(Math.round(work.progress*100)));$("work-progress").style.width=Math.min(100,work.progress*100)+"%";}
     updateContext(nearby);updateShedPanel();renderGear();renderBench(nearby);
+    if(uiModes.is("walk")&&!$("context").hidden)button.hidden=true;
     if(benchEnabled&&selectedTag==="bench"&&benchPermitted()&&clock-benchState.selectedAt<.65)P.ring(C.bench.x,C.bench.z,"#eee3c2a0",reducedMotion?1.2:1.05+Math.min(.3,clock-benchState.selectedAt)*.4,M.height(C.bench.x,C.bench.z)+.024);
     canvas.style.cursor=gesture&&gesture.moved?"grabbing":hover&&actionForTag(hover)?"pointer":"grab";
     P.end();
@@ -350,25 +381,25 @@
   new ResizeObserver(function(entries){bottomHeight=entries[0].contentRect.height;$('game').style.setProperty('--status-height',bottomHeight+'px');}).observe($('bottom-ui'));
   if(globalThis.visualViewport)visualViewport.addEventListener('resize',resize);
   function local(e){var r=canvas.getBoundingClientRect();return {x:e.clientX-r.left,y:e.clientY-r.top};}
-  function closeMenu(){$("menu").hidden=true;$("more").setAttribute("aria-expanded","false");view.root.dataset.menu="";view.invalidate();}
+  function closeMenu(){if(uiModes.is("menu"))uiModes.reset("menu-close");view.syncMode();view.invalidate();}
   function cameraGesture(){overview=false;$("overview").setAttribute("aria-pressed","false");}
   function rotate(dx,dy){if(kit.mode==="binoculars"){optics.yaw-=dx*.0035;optics.pitch=Math.max(-.15,Math.min(.55,optics.pitch+dy*.003));return;}manualCamera=true;cameraGesture();yaw-=dx*.006;pitch=Math.max(C.camera.pitchMin,Math.min(C.camera.pitchMax,pitch+dy*.004));}
-  canvas.addEventListener("pointerdown",function(e){if(benchEnabled&&job&&job.id==="saw"&&benchState.confirmPoint&&performance.now()-benchState.confirmedAt<350&&Math.hypot(e.clientX-benchState.confirmPoint.x,e.clientY-benchState.confirmPoint.y)<56){e.preventDefault();return;}unlock();closeMenu();if(kit.bagOpen)closeTools(false);canvas.focus({preventScroll:true});var p=local(e);touches.set(e.pointerId,p);canvas.setPointerCapture(e.pointerId);gesture={id:e.pointerId,start:p,last:p,moved:e.button===2||e.button===1};
+  canvas.addEventListener("pointerdown",function(e){if(uiModes.blocksWorld()||uiModes.recentlyClosed()){e.preventDefault();if(uiModes.blocksWorld()&&!uiModes.snapshot().pending)uiModes.back("outside");return;}if(benchEnabled&&job&&job.id==="saw"&&benchState.confirmPoint&&performance.now()-benchState.confirmedAt<350&&Math.hypot(e.clientX-benchState.confirmPoint.x,e.clientY-benchState.confirmPoint.y)<56){e.preventDefault();return;}unlock();closeMenu();if(kit.bagOpen)closeTools(false);canvas.focus({preventScroll:true});var p=local(e);touches.set(e.pointerId,p);canvas.setPointerCapture(e.pointerId);gesture={id:e.pointerId,start:p,last:p,moved:e.button===2||e.button===1};
     if(touches.size>=2){gesture.moved=true;if(touches.size===2){var arr=Array.from(touches.values());pinch={length:Math.hypot(arr[0].x-arr[1].x,arr[0].y-arr[1].y),distance:kit.mode==="binoculars"?kit.zoom:overview?camera.distance:distance,last:{x:(arr[0].x+arr[1].x)/2,y:(arr[0].y+arr[1].y)/2}};}else pinch=null;}
   });
-  canvas.addEventListener("pointermove",function(e){var p=local(e);pointer=p;
+  canvas.addEventListener("pointermove",function(e){if(uiModes.blocksWorld())return;var p=local(e);pointer=p;
     if(touches.has(e.pointerId)){touches.set(e.pointerId,p);if(touches.size===2&&pinch){var v=Array.from(touches.values()),n=Math.hypot(v[0].x-v[1].x,v[0].y-v[1].y),centre={x:(v[0].x+v[1].x)/2,y:(v[0].y+v[1].y)/2};if(kit.mode==="binoculars"){kit.zoom=Math.max(1,Math.min(3,pinch.distance*n/Math.max(10,pinch.length)));renderGear();}else distance=Math.max(C.camera.min,Math.min(C.camera.max,pinch.distance*pinch.length/Math.max(10,n)));rotate(centre.x-pinch.last.x,centre.y-pinch.last.y);pinch.last=centre;if(gesture)gesture.moved=true;}
       else if(gesture&&e.pointerId===gesture.id){var dx=p.x-gesture.last.x,dy=p.y-gesture.last.y;if(Math.hypot(p.x-gesture.start.x,p.y-gesture.start.y)>8)gesture.moved=true;if(gesture.moved)rotate(dx,dy);gesture.last=p;}
     }else hover=P.pick(p.x,p.y);
   });
   canvas.addEventListener("pointerup",function(e){var p=local(e),tap=gesture&&gesture.id===e.pointerId&&!gesture.moved&&!pinch;touches.delete(e.pointerId);if(touches.size<2)pinch=null;
-    if(tap&&kit.mode!=="binoculars"){var tag=P.pick(p.x,p.y);if(tag&&tag!=="ground")approach(tag);else {var g=P.ground(p.x,p.y,M.height);if(g){selectedTag=null;walk(g,null);}}}
+    if(tap&&!uiModes.blocksWorld()&&!uiModes.recentlyClosed()&&kit.mode!=="binoculars"){var tag=P.pick(p.x,p.y);if(tag&&tag!=="ground")approach(tag);else {var g=P.ground(p.x,p.y,M.height);if(g){selectedTag=null;walk(g,null);}}}
     if(!touches.size)gesture=null;
   });
   canvas.addEventListener("pointercancel",function(e){touches.delete(e.pointerId);gesture=null;pinch=null;});
   canvas.addEventListener("pointerleave",function(){if(!gesture)hover=null;});
   canvas.addEventListener("contextmenu",function(e){e.preventDefault();});
-  canvas.addEventListener("wheel",function(e){e.preventDefault();var d=e.deltaY*(e.deltaMode===1?16:1);if(kit.mode==="binoculars"){kit.zoom=Math.max(1,Math.min(3,kit.zoom*Math.exp(-d*.0018)));renderGear();return;}if(overview)distance=Math.min(C.camera.max,camera.distance);manualCamera=true;cameraGesture();distance=Math.max(C.camera.min,Math.min(C.camera.max,distance*Math.exp(d*.0018)));if(e.deltaX)yaw-=e.deltaX*.003;},{passive:false});
+  canvas.addEventListener("wheel",function(e){e.preventDefault();if(uiModes.blocksWorld()||uiModes.recentlyClosed())return;var d=e.deltaY*(e.deltaMode===1?16:1);if(kit.mode==="binoculars"){kit.zoom=Math.max(1,Math.min(3,kit.zoom*Math.exp(-d*.0018)));renderGear();return;}if(overview)distance=Math.min(C.camera.max,camera.distance);manualCamera=true;cameraGesture();distance=Math.max(C.camera.min,Math.min(C.camera.max,distance*Math.exp(d*.0018)));if(e.deltaX)yaw-=e.deltaX*.003;},{passive:false});
   function toggleOverview(){closeTools(false);overview=!overview;$("overview").setAttribute("aria-pressed",String(overview));}
   var actionIcons={
     chop:"M5 22 16 4M11 8l4-6 7 4-4 7-7-5Z",
@@ -381,49 +412,51 @@
     shed:"M3 10 12 3l9 7M5 9v12h14V9M8 15h8M8 18h8"
   };
   function contextAction(){
-    if(kit.bagOpen||kit.mode==="binoculars"||job||keys.size||shedOpen&&nearShed()||!$("menu").hidden||document.querySelector("dialog[open]"))return null;
+    if(!uiModes.is("walk")||uiModes.snapshot().pending||kit.bagOpen||kit.mode==="binoculars"||job||keys.size||shedOpen&&nearShed()||!$("menu").hidden||document.querySelector("dialog[open]"))return null;
     if(sitting)return {tag:"seat",action:{type:"stand",available:true,label:"Встать со скамьи",object:"Отдых у моря",resultPreview:"Можно продолжить прогулку. День во время отдыха не проходит.",progress:0}};
     var tags=allTags(),best=null,dist=C.interactionReach;
     tags.forEach(function(tag){var a=navAction(tag);if(!a||a.done)return;var d=Math.hypot(state.avatar.x-a.x,state.avatar.z-a.z);if(d<=C.interactionReach&&M.clear(state,state.avatar,a)&&(!best||tag===selectedTag||(best.tag!==selectedTag&&d<dist))){best={tag:tag,action:a};dist=d;}});
     return best;
   }
   function updateContext(nearby){
-    var title,detail,action=null,tag=null,mode="normal";
-    if(saveBlocked){title="Игра приостановлена";detail="Сохранение не изменено. Для нового начала открой меню.";mode="disabled";}
-    else if(job&&job.working){var work=U.action(state,job.id);title=work.object;detail=work.label+". "+(work.resultPreview||"Сделанная часть сохранится при паузе.");mode="busy";}
-    else if(job){title="Смотритель идёт";detail=selectedTag?"У предмета он остановится. Затем выбери действие.":"Можно выбрать другое место и изменить путь.";mode="busy";}
-    else if(nearby){action=nearby.action;tag=nearby.tag;title=action.object||"Рядом со смотрителем";detail=action.available?action.resultPreview||action.detail:action.reason;mode=action.available?"normal":"disabled";}
-    else {var point=CloseCoast.points.find(function(p){return Math.hypot(state.avatar.x-p.stand.x,state.avatar.z-p.stand.z)<1.5;});
-      if(point){title=point.name;detail=point.detail+" Инструменты — в сумке смотрителя.";}else {var guidance=U.guidance(state,{sitting:sitting});title=guidance.title;detail=guidance.detail;}}
-    view.context({title:title,detail:detail,action:action,tag:tag,mode:mode,job:!!job,working:!!(job&&job.working)});
+    var title="",detail="",action=null,tag=null,mode="normal",visible=uiModes.is("walk")&&!uiModes.snapshot().pending&&!saveBlocked;
+    if(job){var work=job.id?U.action(state,job.id):null;title=job.working&&work?work.label:"Смотритель идёт";mode="busy";}
+    else if(nearby&&nearby.tag===selectedTag){action=nearby.action;tag=nearby.tag;title=action.object||"";detail=action.available?action.resultPreview||"":action.reason;mode=action.available?"normal":"disabled";}
+    else visible=false;
+    view.context({visible:visible,title:title,detail:detail,action:action,tag:tag,mode:mode,job:!!job,working:!!(job&&job.working)});
   }
   function shedCommand(id){
     if(saveBlocked||job||!shedOpen||$("shed-panel").hidden||!nearShed())return;
     var a=id?M.info(state,id):null;if(!a||!a.available){notify(U.action(state,id||"store:logs").reason);return;}
-    selectedTag=id==="shed:upgrade"?id:"shed:"+id.split(":")[1];keys.clear();unlock();walk(a,a);shedOpen=true;
+    selectedTag=id==="shed:upgrade"?id:"shed:"+id.split(":")[1];keys.clear();unlock();walk(a,a);shedOpen=uiModes.is("shed");
   }
   function updateShedPanel(){
-    if(kit.bagOpen||kit.mode!=="none"){shedOpen=false;return;}
-    if(!job&&!nearShed())shedOpen=false;
-    var show=shedOpen&&!saveBlocked&&nearShed()&&$("menu").hidden&&!document.querySelector("dialog[open]");view.panel(show);if(!show)return;
-    var caps=M.capacity(state),store=state.carry.kind?"store:"+state.carry.kind:null,busy=!!job;
+    if(!uiModes.is("shed")){shedOpen=false;view.panel(false);return;}
+    if(saveBlocked||!job&&!nearShed()){uiModes.reset("shed-unavailable");view.panel(false);return;}
+    shedOpen=true;view.panel(true,"shed");
+    var caps=M.capacity(state),store=state.carry.kind?"store:"+state.carry.kind:null,busy=!!job,partial=state.carry.kind==="boards"&&state.carry.amount<C.carryLimit.boards;
+    $("shed-panel").dataset.carry=partial?"partial":state.carry.amount?"loaded":"empty";
     $("shed-logs").textContent=state.logs+" из "+caps.logs;$("shed-boards").textContent=state.boards+" из "+caps.boards;$("shed-carry").textContent=cargoText();
+    var preferred=store?"shed-store":U.action(state,"take:boards").available?"shed-take-boards":"shed-take-logs";
     [["shed-store",store],["shed-take-logs","take:logs"],["shed-take-boards","take:boards"],["shed-upgrade","shed:upgrade"]].forEach(function(pair){
-      var button=$(pair[0]),description=pair[1]?U.action(state,pair[1]):null;
-      view.command(button,description,{label:$(pair[0]+"-label"),reason:$(pair[0]+"-reason"),busy:busy,active:!!job&&job.id===pair[1],describedBy:pair[0]==="shed-upgrade"?"shed-upgrade-cost shed-upgrade-capacity shed-upgrade-reason"+(busy?" shed-feedback":""):null,emptyLabel:"Сложить материалы",emptyReason:U.action(state,"store:logs").reason});
+      var button=$(pair[0]),description=pair[1]?U.action(state,pair[1]):null,reason=$(pair[0]+"-reason");
+      view.command(button,description,{label:$(pair[0]+"-label"),reason:reason,busy:busy,active:!!job&&job.id===pair[1],describedBy:pair[0]==="shed-upgrade"?"shed-upgrade-cost shed-upgrade-capacity shed-upgrade-reason"+(busy?" shed-feedback":""):null,emptyLabel:"Сложить материалы",emptyReason:U.action(state,"store:logs").reason});
+      reason.hidden=pair[0]!=="shed-upgrade"||uiModes.snapshot().detail!=="shed-details"||!reason.textContent;
+      button.classList.toggle("primary",!busy&&!!description&&description.available&&(pair[0]===preferred||pair[0]==="shed-upgrade"));
       button.setAttribute("data-action-id",pair[1]||"");
       if(busy&&job.id===pair[1])button.dataset.state="busy";
     });
+    $("shed-take-logs").hidden=partial;
     var upgrade=U.action(state,"shed:upgrade");$("shed-upgrade-cost").hidden=upgrade.done;$("shed-upgrade-cost").textContent=upgrade.cost;$("shed-upgrade-capacity").textContent=upgrade.done?"Вместимость: брёвна "+caps.logs+", доски "+caps.boards:upgrade.capacityPreview;
-    var feedback=$("shed-feedback"),result=resultView&&clock-resultView.at<6&&["store","take","upgrade"].indexOf(resultView.type)>=0,notice=panelNotice&&clock-panelNotice.at<6,wasBusy=$("shed-panel").dataset.state==="busy";
+    var feedback=$("shed-feedback"),result=resultView&&clock-resultView.at<4&&["store","take","upgrade"].indexOf(resultView.type)>=0,notice=panelNotice&&clock-panelNotice.at<6,wasBusy=$("shed-panel").dataset.state==="busy";
     feedback.hidden=!busy&&!result&&!notice;$("shed-panel").dataset.state=busy?"busy":result?"result":"normal";
-    if(busy)view.feedback(feedback,(job.working?"Идёт работа: ":"Подходим к отсеку: ")+U.action(state,job.id).label+". Сделанная часть сохраняется при паузе.","busy");
+    if(busy)view.feedback(feedback,(job.working?"Работа: ":"Подходим: ")+U.action(state,job.id).label,"busy");
     else if(notice)view.feedback(feedback,panelNotice.text,"disabled");
-    else if(result)view.feedback(feedback,U.result(state,resultView.id,resultView.type,resultView.amount),"result");
+    else if(result){var message=resultView.type==="upgrade"?U.result(state,resultView.id,resultView.type,resultView.amount):(resultView.type==="store"?"Сложено: ":"Взято: ")+U.material(resultView.amount,String(resultView.id).split(":")[1])+".";view.feedback(feedback,message,"result");}
     $("shed-pause").hidden=!busy;$("shed-pause").textContent=job&&job.working?"Пауза":"Стоп";$("shed-pause").setAttribute("aria-label",job&&job.working?"Приостановить работу":"Остановиться");
     if(busy&&!wasBusy||!busy&&wasBusy){$("shed-scroll").scrollTop=0;if(view.keyboard())$(busy?"shed-pause":"shed-close").focus({preventScroll:true});}
   }
-  function closeShed(){shedOpen=false;panelNotice=null;view.panel(false);canvas.focus({preventScroll:true});}
+  function closeShed(){pause(true);panelNotice=null;uiModes.reset("shed-close");view.syncMode();canvas.focus({preventScroll:true});}
   $("shed-close").addEventListener("click",closeShed);
   ["shed-store","shed-take-logs","shed-take-boards","shed-upgrade"].forEach(function(id){$(id).addEventListener("click",function(){if(job){notify("Идёт действие. Можно дождаться результата или приостановить работу.");return;}shedCommand(this.getAttribute("data-action-id"));});});
   function pauseFromUI(){var working=job&&job.working;pause(false);keys.clear();refresh();if(working)notify("Работа приостановлена. Выбери ту же команду, чтобы продолжить.");}
@@ -431,25 +464,22 @@
   $("context-command").addEventListener("click",function(){if(this.hidden)return;nearest();if(!shedOpen)canvas.focus({preventScroll:true});});
   function nearest(){
     if(job&&job.working){pause(true);refresh();return;}
-    var nearby=contextAction();if(nearby){if(benchEnabled&&nearby.tag==="bench"){if(selectedTag==="bench"||benchState.focused)confirmBench();else selectBench();}else interact(nearby.tag);}
+    var nearby=contextAction();if(nearby){if(benchEnabled&&nearby.tag==="bench"){if(selectedTag==="bench"||benchState.focused)confirmBench();else selectBench();}else {selectedTag=nearby.tag;interact(nearby.tag);}}
   }
   $("act").addEventListener("click",function(){if(this.hidden)return;var nearby=contextAction();if(nearby&&nearby.tag===this.getAttribute("data-action")){if(benchEnabled&&nearby.tag==="bench"){if(selectedTag==="bench"||benchState.focused)confirmBench();else selectBench();return;}interact(nearby.tag);if(!shedTag(nearby.tag))canvas.focus({preventScroll:true});}});
   document.addEventListener("keydown",function(e){
     if(document.querySelector("dialog[open]"))return;
-    if(!$("menu").hidden){if(e.code==="Escape"){closeMenu();$("more").focus({preventScroll:true});}return;}
+    if(e.code==="Escape"&&!uiModes.is("walk")){e.preventDefault();uiModes.back("escape");return;}
     if(e.code==="KeyB"&&!e.repeat){e.preventDefault();openBag();return;}
-    if(kit.bagOpen){if(e.code==="Escape"){closeTools();e.preventDefault();}return;}
+    if(uiModes.blocksWorld()){if(["ArrowUp","ArrowDown","ArrowLeft","ArrowRight","KeyW","KeyA","KeyS","KeyD","KeyE","KeyM","KeyF"].indexOf(e.code)>=0)e.preventDefault();return;}
     if(kit.mode==="binoculars"){
-      if(e.code==="Escape"){closeTools();e.preventDefault();return;}
-      if(["ArrowUp","ArrowDown","ArrowLeft","ArrowRight","KeyW","KeyA","KeyS","KeyD"].indexOf(e.code)>=0){e.preventDefault();keys.add(e.code);return;}
+      if(["ArrowUp","ArrowDown","ArrowLeft","ArrowRight","KeyW","KeyA","KeyS","KeyD"].indexOf(e.code)>=0){e.preventDefault();if(!e.repeat||keys.has(e.code))keys.add(e.code);return;}
       if(e.code==="Equal"||e.code==="NumpadAdd"){e.preventDefault();changeZoom(.25);}else if(e.code==="Minus"||e.code==="NumpadSubtract"){e.preventDefault();changeZoom(-.25);}return;
     }
     if(kit.mode==="lantern"&&e.code==="Escape"){closeTools();e.preventDefault();return;}
-    if(shedOpen&&e.code==="Escape"){pause(false);closeShed();refresh();return;}
-    if(shedOpen&&e.code==="KeyE")return;
     if(e.target.closest&&e.target.closest("button")&&e.code!=="Escape")return;
-    if(["ArrowUp","ArrowDown","ArrowLeft","ArrowRight","KeyW","KeyA","KeyS","KeyD"].indexOf(e.code)>=0){e.preventDefault();keys.add(e.code);unlock();}
-    if(e.code==="KeyE"&&!e.repeat)nearest();if(e.code==="KeyM"&&!e.repeat)toggleOverview();if(e.code==="KeyF"&&!e.repeat)resetCamera();if(e.code==="Escape"){pause(false);sitting=false;shedOpen=false;if(benchEnabled&&selectedTag==="bench")dismissBench();refresh();}
+    if(["ArrowUp","ArrowDown","ArrowLeft","ArrowRight","KeyW","KeyA","KeyS","KeyD"].indexOf(e.code)>=0){e.preventDefault();if(!e.repeat||keys.has(e.code)){keys.add(e.code);unlock();}}
+    if(e.code==="KeyE"&&!e.repeat)nearest();if(e.code==="KeyM"&&!e.repeat)toggleOverview();if(e.code==="KeyF"&&!e.repeat)resetCamera();if(e.code==="Escape"){pause(false);sitting=false;if(benchEnabled&&selectedTag==="bench")dismissBench();refresh();}
   });
   document.addEventListener("keyup",function(e){if(keys.delete(e.code)&&keys.size===0&&kit.mode!=="binoculars"){persist();refresh();}});
   globalThis.addEventListener("blur",function(){keys.clear();});
@@ -474,10 +504,15 @@
   $("overview").addEventListener("click",function(){toggleOverview();closeMenu();canvas.focus({preventScroll:true});});
   function resetCamera(){closeTools(false);manualCamera=false;resultView=null;cameraGesture();yaw=C.camera.yaw;pitch=C.camera.pitch;distance=C.camera.distance;}
   $("focus").addEventListener("click",function(){resetCamera();closeMenu();canvas.focus({preventScroll:true});});
-  function toggleMenu(){var visible=$("menu").hidden;if(visible)closeTools(false);$("menu").hidden=!visible;$("more").setAttribute("aria-expanded",String(visible));view.root.dataset.menu=visible?"open":"";if(visible){pause(true);keys.clear();$("sound").focus({preventScroll:true});}view.invalidate();}
+  function toggleMenu(){if(uiModes.snapshot().pending)return;if(uiModes.is("menu")){uiModes.back("menu-toggle");return;}closeTools(false,true);pause(true);clearUIInput();uiModes.open("menu");view.invalidate();}
   // Some touch/fullscreen paths deliver pointerup without the compatibility
   // click. Activate a short in-bounds touch once; keep native keyboard/mouse.
-  var menuTouch=null,menuTouchClickUntil=0;
+  var menuTouch=null,menuTouchClickUntil=0,menuTouchClickPoint=null;
+  // Opening the landscape menu moves its close button under the same finger.
+  // Consume that compatibility click even when its target has changed. A fresh
+  // pointerdown starts a new intentional gesture and remains immediately usable.
+  document.addEventListener("pointerdown",function(){menuTouchClickUntil=0;},{capture:true,passive:true});
+  document.addEventListener("click",function(e){if(e.detail>0&&menuTouchClickPoint&&performance.now()<menuTouchClickUntil&&Math.hypot(e.clientX-menuTouchClickPoint.x,e.clientY-menuTouchClickPoint.y)<12){e.preventDefault();e.stopImmediatePropagation();}},{capture:true});
   $("more").addEventListener("pointerdown",function(e){
     if(e.pointerType!=="touch"){menuTouch=null;menuTouchClickUntil=0;return;}
     menuTouch=e.isPrimary?{id:e.pointerId,x:e.clientX,y:e.clientY,moved:false}:null;
@@ -487,18 +522,22 @@
   $("more").addEventListener("pointerup",function(e){
     var tap=menuTouch;menuTouch=null;if(!tap||tap.id!==e.pointerId||tap.moved)return;
     var box=this.getBoundingClientRect();if(e.clientX<box.left||e.clientX>box.right||e.clientY<box.top||e.clientY>box.bottom)return;
-    menuTouchClickUntil=performance.now()+750;e.preventDefault();toggleMenu();
+    menuTouchClickPoint={x:e.clientX,y:e.clientY};menuTouchClickUntil=performance.now()+750;e.preventDefault();view.root.dataset.input="touch";view.invalidate();toggleMenu();
   });
   $("more").addEventListener("click",function(e){if(e&&e.detail>0&&performance.now()<menuTouchClickUntil)return;toggleMenu();});
   $("sound").addEventListener("click",function(){muted=!muted;this.setAttribute("aria-pressed",String(muted));this.setAttribute("aria-label",muted?"Включить звук":"Выключить звук");this.textContent=muted?"Звук выкл.":"Звук вкл.";if(!muted)unlock();else audioVisibility();});
   $("motion").addEventListener("click",function(){motionOverride=!reducedMotion;applyPresentation();persistPresentation();});
   $("quality").addEventListener("click",function(){quality=quality==="standard"?"lighter":"standard";applyPresentation();resize();persistPresentation();resetPerformance();});
   $("performance-toggle").addEventListener("click",function(){var show=$("performance-panel").hidden;$("performance-panel").hidden=!show;this.setAttribute("aria-pressed",String(show));this.textContent=show?"Скрыть плавность":"Показать плавность";if(show)$("performance-panel").textContent="Измеряю FPS и время кадра…";});
-  $("help").addEventListener("click",function(){closeTools(false);closeMenu();pause(true);keys.clear();$("help-dialog").showModal();});
-  $("help-close").addEventListener("click",function(){$("help-dialog").close();canvas.focus();});
-  $("restart").addEventListener("click",function(){closeTools(false);closeMenu();pause(true);keys.clear();$("restart-dialog").showModal();});
-  $("restart-cancel").addEventListener("click",function(){$("restart-dialog").close();});
-  $("restart-confirm").addEventListener("click",function(){saveBlocked=false;state=M.create();shedOpen=false;job=null;hover=null;selectedTag=null;sitting=false;sitBlend=0;visited.clear();camera.x=state.avatar.x;camera.z=state.avatar.z;resetCamera();persist();refresh();$("restart-dialog").close();});
+  $("help").addEventListener("click",function(){uiModes.open("help",{returnTo:"menu"});});
+  $("help-close").addEventListener("click",function(){uiModes.back("help-close");});
+  $("restart").addEventListener("click",function(){uiModes.open("confirm",{returnTo:"menu"});});
+  $("restart-cancel").addEventListener("click",function(){uiModes.back("restart-cancel");});
+  ["help-dialog","restart-dialog"].forEach(function(id){$(id).addEventListener("cancel",function(e){e.preventDefault();uiModes.back("dialog-cancel");});});
+  $("menu-close").addEventListener("click",function(){uiModes.back("menu-close");});
+  [["shed-details-toggle","shed-details"],["binocular-places-toggle","places"],["bag-places-toggle","bag-places"]].forEach(function(pair){$(pair[0]).addEventListener("click",function(){if(uiModes.snapshot().detail===pair[1])uiModes.back("detail-toggle");else uiModes.openDetail(pair[1]);});});
+  ["shed-details-back","binocular-places-back","bag-places-back"].forEach(function(id){$(id).addEventListener("click",function(){uiModes.back("detail-back");});});
+  $("restart-confirm").addEventListener("click",function(){saveBlocked=false;state=M.create();shedOpen=false;job=null;hover=null;selectedTag=null;sitting=false;sitBlend=0;visited.clear();camera.x=state.avatar.x;camera.z=state.avatar.z;resetCamera();persist();refresh();uiModes.reset("restart-confirm");});
   globalThis.addEventListener("openai:set_globals",function(e){
     var incoming=e.detail&&e.detail.globals&&e.detail.globals.widgetState;if(!incoming||typeof incoming!=="object")return;
     hostEnvelope=Object.assign({},hostEnvelope,incoming);
@@ -506,10 +545,26 @@
     if(!present&&!imported)return;var s=M.restore(present?incoming[SLOT]:incoming.closeIsland);if(!s){unreadableSave();pause(true);return;}
     var a=s.sync||{revision:0,writer:""},b=state.sync||{revision:revision,writer:""};
     if(a.revision<revision||(hasInitial&&a.revision===revision&&a.writer<=b.writer))return;
-    closeTools(false);job=null;selectedTag=null;hover=null;shedOpen=false;sitting=false;sitBlend=0;keys.clear();closeMenu();document.querySelectorAll("dialog[open]").forEach(function(d){d.close();});state=s;revision=a.revision;hasInitial=true;saveBlocked=false;if(widget())saveMemoryOnly=false;if(imported)persist();refresh();
+    closeTools(false);uiModes.reset("host-state");job=null;selectedTag=null;hover=null;shedOpen=false;sitting=false;sitBlend=0;keys.clear();closeMenu();document.querySelectorAll("dialog[open]").forEach(function(d){d.close();});state=s;revision=a.revision;hasInitial=true;saveBlocked=false;if(widget())saveMemoryOnly=false;if(imported)persist();refresh();
   });
   document.addEventListener("visibilitychange",function(){if(document.hidden&&hasInitial)persist();audioVisibility();last=performance.now();resetPerformance();});
-  $("bench-select").addEventListener("click",selectBench);$("bench-confirm").addEventListener("click",confirmBench);$("bench-pause").addEventListener("click",function(e){if(e.detail>0&&(e.detail>1||performance.now()-benchState.confirmedAt<350))return;pauseFromUI();renderBench(contextAction());});$("bench-dismiss").addEventListener("click",dismissBench);
+  $("bench-select").addEventListener("pointerdown",function(e){
+    if(!e.isPrimary||e.button!==0)return;
+    var point=local(e);benchPointer={id:e.pointerId,x:e.clientX,y:e.clientY,tag:P.pick(point.x,point.y),moved:false};benchPointerClickUntil=0;
+    // Prevent focus from inserting a prompt between down/up and retargeting
+    // the compatibility click to its common ancestor instead of this button.
+    e.preventDefault();this.setPointerCapture(e.pointerId);
+  });
+  $("bench-select").addEventListener("pointermove",function(e){if(benchPointer&&benchPointer.id===e.pointerId&&Math.hypot(e.clientX-benchPointer.x,e.clientY-benchPointer.y)>8)benchPointer.moved=true;});
+  $("bench-select").addEventListener("pointercancel",function(){benchPointer=null;benchPointerClickUntil=performance.now()+750;});
+  $("bench-select").addEventListener("pointerup",function(e){
+    var tap=benchPointer;benchPointer=null;if(!tap||tap.id!==e.pointerId)return;
+    benchPointerClickUntil=performance.now()+750;e.preventDefault();
+    var box=this.getBoundingClientRect();if(tap.moved||e.clientX<box.left||e.clientX>box.right||e.clientY<box.top||e.clientY>box.bottom)return;
+    view.root.dataset.input=e.pointerType==="touch"||e.pointerType==="pen"?"touch":"mouse";view.invalidate();
+    selectBench({detail:1,clientX:e.clientX,clientY:e.clientY,worldTag:tap.tag});
+  });
+  $("bench-select").addEventListener("click",function(e){if(e.detail>0&&performance.now()<benchPointerClickUntil)return;selectBench(e);});$("bench-confirm").addEventListener("click",confirmBench);$("bench-pause").addEventListener("click",function(e){if(e.detail>0&&(e.detail>1||performance.now()-benchState.confirmedAt<350))return;pauseFromUI();renderBench(contextAction());});$("bench-dismiss").addEventListener("click",dismissBench);
   $("bench-select").addEventListener("focus",function(){benchState.focused=true;renderBench(contextAction());});$("bench-select").addEventListener("blur",function(){benchState.focused=false;});
   $("bag").addEventListener("click",openBag);$("bag-close").addEventListener("click",function(){closeTools();});
   $("gear-lantern").addEventListener("click",function(){unlock();useTool("lantern");});$("gear-binoculars").addEventListener("click",function(){useTool("binoculars");});
@@ -517,6 +572,7 @@
   $("coast-previous").addEventListener("click",function(){shiftPoint(-1);});$("coast-next").addEventListener("click",function(){shiftPoint(1);});
   ["bag-places","binocular-points"].forEach(function(id){$(id).addEventListener("click",function(e){var b=e.target.closest("button[data-coast-point]");if(!b||!this.contains(b))return;if(b.dataset.coastAction==="walk")walkCoast(b.dataset.coastPoint);else if(kit.mode==="binoculars")aimPoint(b.dataset.coastPoint);});});
   globalThis.CloseDemo={
+    uiMode:function(){return uiModes.snapshot();},
     renderer:function(){return P.diagnostics();},
     gear:function(){return JSON.parse(JSON.stringify({bagOpen:kit.bagOpen,mode:kit.mode,zoom:kit.zoom,point:kit.point,observation:kit.mode==="binoculars"?optics:null,savedNormal:savedNormal}));},
     coast:function(){return CloseCoast.snapshot(coast);},
