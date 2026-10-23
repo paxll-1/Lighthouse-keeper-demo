@@ -3,7 +3,7 @@
 (function(G){
   "use strict";
   var KEY="__lighthouse_ui_modes_v1__",tag="close-ui-modes";
-  var modes=["walk","shed","bag","binoculars","menu","help","confirm"];
+  var modes=["walk","shed","bag","binoculars","gallery","menu","help","confirm"];
   var details={places:"binoculars","shed-details":"shed","bag-places":"bag"};
   var own=Object.prototype.hasOwnProperty;
   function page(mode,detail){return {mode:mode,detail:detail||null};}
@@ -112,13 +112,17 @@
     if(current.mode===mode&&current.detail===null)return false;
     if(mode==="help"||mode==="confirm"){
       if(modes.indexOf(options.returnTo)>=0&&options.returnTo!==mode){
-        if(options.returnTo!=="walk")path.push(page(options.returnTo));
+        if(options.returnTo!=="walk"){
+          if(["bag","binoculars","menu"].indexOf(options.returnTo)>=0&&this._path.some(function(p){return p.mode==="gallery";}))path.push(page("gallery"));
+          path.push(page(options.returnTo));
+        }
       }else if(current.mode!=="walk"&&current.mode!==mode){
         path=copyPath(this._path);
         // Help/confirmation replace one another rather than accumulating dialogs.
         if(current.mode==="help"||current.mode==="confirm")path.pop();
       }
     }
+    if(["bag","binoculars","menu"].indexOf(mode)>=0&&this._path.some(function(p){return p.mode==="gallery";}))path.push(page("gallery"));
     path.push(page(mode));this._ensureEntry();
     return this._apply(path,{reason:"open",source:options.source||null});
   };

@@ -76,6 +76,13 @@ globalThis.CloseConfig = {
     "x": 10,
     "z": -7
   },
+  "gallery": {
+    "repairBoards": 2,
+    "repairSeconds": 5,
+    "approach": {"x": 10, "z": -4.8},
+    "eye": [10, 6.8, -5.16],
+    "look": {"x": -3, "y": 0.55, "z": 3}
+  },
   "camera": {
     "distance": 12.5,
     "min": 8,

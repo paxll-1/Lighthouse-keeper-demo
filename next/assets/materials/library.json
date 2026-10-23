@@ -1,0 +1,17 @@
+{
+  "schemaVersion": 1,
+  "id": "lk.palette.coast.v1",
+  "colorSpace": "baseColor hex is sRGB; convert to linear for shader factors; exported glTF factors are linear",
+  "materials": {
+    "coatOchre": {"baseColor": "#B9893C", "roughness": 0.88, "metalness": 0, "intent": "Warm matte wool/oilskin; broad cloth shapes carry the color"},
+    "keeperDark": {"baseColor": "#29423E", "roughness": 0.83, "metalness": 0, "intent": "Deep cool leather, trousers and hidden hood cavity"},
+    "crabRust": {"baseColor": "#AA6B50", "roughness": 0.64, "metalness": 0, "intent": "Restrained rust chitin, rounded upper shell; vertex color darkens eyes using this same material"},
+    "wetSlate": {"baseColor": "#4E6963", "roughness": 0.51, "metalness": 0, "intent": "Cool darker wet stone at the pool edge"},
+    "sandMuted": {"baseColor": "#B6AF83", "roughness": 0.95, "metalness": 0, "intent": "Quiet warm ground behind the local animal"},
+    "waterTeal": {"baseColor": "#80AFA9", "roughness": 0.44, "metalness": 0, "intent": "Muted shallow water, brighter than wet edge"},
+    "foamIvory": {"baseColor": "#DFDDC6", "roughness": 0.91, "metalness": 0, "intent": "Sparing broken foam accents"}
+  },
+  "textures": [],
+  "normalPolicy": "Authored smooth curved cloth/chitin, hard hem and boot sole; no normal textures",
+  "provenance": "Original project palette, no downloaded textures or external generation"
+}

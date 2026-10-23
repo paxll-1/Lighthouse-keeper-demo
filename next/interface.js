@@ -2,7 +2,7 @@
 (function(G){
   "use strict";
   var $=function(id){return document.getElementById(id);};
-  var modesList=["walk","shed","bag","binoculars","menu","help","confirm"];
+  var modesList=["walk","shed","bag","binoculars","gallery","menu","help","confirm"];
   function text(node,value){value=String(value||"");if(!node||node.textContent===value)return false;node.textContent=value;return true;}
   function state(node,value){if(!node||node.dataset.state===value)return false;node.dataset.state=value;return true;}
   function attribute(node,name,value){value=String(value);if(node&&node.getAttribute(name)!==value)node.setAttribute(name,value);}
@@ -22,7 +22,7 @@
     document.addEventListener("pointercancel",function(){pendingPointerInput=null;},{capture:true,passive:true});
     document.addEventListener("keydown",function(e){if(!e.metaKey&&!e.ctrlKey&&!e.altKey){pendingPointerInput=null;input("keyboard");}},{capture:true});
     var observer=new ResizeObserver(function(){self.invalidate();});
-    [this.root,$("context"),$("shed-panel"),$("bag-panel"),$("tool-panel"),$("binocular-coast"),$("menu"),$("save")].forEach(function(n){if(n)observer.observe(n);});
+    [this.root,$("context"),$("shed-panel"),$("bag-panel"),$("tool-panel"),$("gallery-panel"),$("binocular-coast"),$("menu"),$("save")].forEach(function(n){if(n)observer.observe(n);});
     if(G.visualViewport)visualViewport.addEventListener("resize",function(){self.invalidate();});
     $("save").hidden=true;$("save-dismiss").addEventListener("click",function(){self.errorRead=true;$("save").hidden=true;self.invalidate();$("world").focus({preventScroll:true});});
     this.syncMode();
@@ -41,8 +41,8 @@
     data("uiMode",mode);data("uiDetail",detail||"none");data("uiPending",String(!!s.pending));
     data("menu",mode==="menu"?"open":"closed");
     var lantern=mode==="walk"&&this.root.dataset.gear==="lantern";
-    data("panel",mode==="shed"||mode==="bag"||mode==="binoculars"?mode:lantern?"lantern":"none");
-    show("shed-panel",mode==="shed");show("bag-panel",mode==="bag");show("menu",mode==="menu");show("tool-panel",mode==="binoculars"||lantern);
+    data("panel",mode==="shed"||mode==="bag"||mode==="binoculars"||mode==="gallery"?mode:lantern?"lantern":"none");
+    show("shed-panel",mode==="shed");show("bag-panel",mode==="bag");show("menu",mode==="menu");show("tool-panel",mode==="binoculars"||lantern);show("gallery-panel",mode==="gallery");
     show("context",mode==="walk"&&this.contextWanted);
     show("shed-main",detail!=="shed-details");show("shed-details",mode==="shed"&&detail==="shed-details");show("shed-details-back",mode==="shed"&&detail==="shed-details");show("shed-details-toggle",mode==="shed"&&detail!=="shed-details");
     attribute($("shed-details-toggle"),"aria-expanded",mode==="shed"&&detail==="shed-details");

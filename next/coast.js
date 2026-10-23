@@ -9,17 +9,20 @@
     Object.freeze({id:'east-gull',x:14.0613,y:-.124,z:6.2384,heading:2.2,direction:-1})
   ]);
   const crabRules=Object.freeze({hideRadius:2.2,clearRadius:3.05,quietSpeed:.16,quietSeconds:2.6,retreatSeconds:.6,emergeSeconds:2.3});
+  // The two former slope-straddling perches move within the existing pool
+  // onto the flat low shore. Pose support is an art placement constraint, not
+  // new terrain, adaptive IK, navigation or changes to reaction rules.
   const crabHomes=Object.freeze([
     Object.freeze({id:'pool-crab-a',x:19.5,z:6.12,heading:-.4,refugeX:19.12,refugeZ:6.16,color:'#ab6c4e',scale:1.1}),
-    Object.freeze({id:'pool-crab-b',x:20.05,z:5.65,heading:.7,refugeX:19.86,refugeZ:5.35,color:'#bc8157',scale:.88}),
-    Object.freeze({id:'pool-crab-c',x:21.1,z:5.98,heading:-1.2,refugeX:21.43,refugeZ:5.76,color:'#965d4a',scale:1}),
+    Object.freeze({id:'pool-crab-b',x:20.05,z:6.05,heading:.7,refugeX:19.86,refugeZ:6.10,color:'#bc8157',scale:.88}),
+    Object.freeze({id:'pool-crab-c',x:20.87,z:6.10,heading:-1.2,refugeX:21.15,refugeZ:6.13,color:'#965d4a',scale:1}),
     Object.freeze({id:'pool-crab-d',x:20.55,z:6.55,heading:2.7,refugeX:20.92,refugeZ:6.53,color:'#b47855',scale:.82})
   ]);
   const points=Object.freeze([
     Object.freeze({id:'west-watch',name:'Западные камни',detail:'Чайка оглядывает воду с плоского камня. С этого места можно спокойно смотреть издали.',stand:Object.freeze({x:-8.4,z:6.9}),look:Object.freeze({x:-11.752,y:.12,z:8.44})}),
     Object.freeze({id:'tide-line',name:'Полоса прилива',detail:'В мелкой лужице отражается небо. Светлые ракушки и тёмные водоросли отмечают край отлива.',stand:Object.freeze({x:-4.4,z:9.65}),look:Object.freeze({x:-5.8,y:-.53,z:11.2})}),
     Object.freeze({id:'east-watch',name:'Восточный дозор',detail:'На высоком прибрежном камне сидит вторая чайка. Близкий подход заставит её подняться над водой.',stand:Object.freeze({x:10.3,z:6}),look:Object.freeze({x:14.0613,y:.15,z:6.2384})}),
-    Object.freeze({id:'crab-cove',name:'Крабовая бухта',detail:'За каменным проходом осталась приливная лужа. Крабы прячутся от близких шагов и понемногу выходят, если смотреть издали без движения.',stand:Object.freeze({x:18.45,z:2.6}),look:Object.freeze({x:20.25,y:-.46,z:6.1})})
+    Object.freeze({id:'crab-cove',name:'Крабовая бухта',detail:'За каменным проходом осталась приливная лужа. Крабы прячутся от близких шагов и понемногу выходят, если смотреть издали без движения.',stand:Object.freeze({x:18.45,z:2.6}),look:Object.freeze({x:20.87,y:-.44,z:6.10})})
   ]);
   const clamp=(n,a,b)=>Math.max(a,Math.min(b,n));
   const smooth=n=>n*n*(3-2*n);
@@ -183,45 +186,32 @@
     }
   }
   function crabShelters(P,lighter){
+    const wet=G.ThreeIslandPreview?.materialLibrary?.materials?.wetSlate?.baseColor||'#627c7c';
     for(const h of crabHomes){
       const x=h.refugeX,z=h.refugeZ,y=G.CloseModel.height(x,z);
-      P.poly([[x-.2,y+.015,z-.12],[x+.2,y+.015,z-.12],[x+.24,y+.04,z+.09],[x-.18,y+.04,z+.13]],'#536f69');
-      smallBody(P,x,y+.12,z+.07,.25,.14,.18,'#a2aa96',true);
-      if(!lighter)P.poly([[x-.12,y+.21,z+.01],[x+.05,y+.25,z+.015],[x+.12,y+.2,z+.07],[x-.09,y+.2,z+.1]],'#b9bea0');
+      // Low, split refuge behind the animal leaves the pincers/shell readable
+      // from the existing observation stand. Contact is broad, never a square pad.
+      P.poly([[x-.22,y+.007,z-.1],[x+.17,y+.007,z-.12],[x+.25,y+.008,z+.14],[x-.19,y+.008,z+.19]],wet,.38);
+      smallBody(P,x-.085,y+.032,z+.17,.18,.036,.14,'#82968f',false);
+      smallBody(P,x+.14,y+.024,z+.19,.11,.028,.105,'#9da88f',false);
+      if(!lighter)P.poly([[x-.2,y+.018,z+.12],[x-.17,y+.023,z+.19],[x-.07,y+.022,z+.24],[x-.13,y+.023,z+.15]],'#638579');
     }
   }
-  function crab(P,p,lighter){
+  function crab(P,p,lighter,reducedMotion){
     if(p.visibility<.015)return;
-    P.group({x:p.x,y:p.y,z:p.z,ry:p.heading},()=>{
-      const k=p.scale,body=.145*k,depth=.11*k,top=.115*k;
-      const rim=[];for(let i=0;i<6;i++){const a=i*TAU/6;rim.push([Math.cos(a)*body,.055*k,Math.sin(a)*depth]);}
-      for(let i=0;i<6;i++)P.poly([rim[i],rim[(i+1)%6],[0,top,0]],i%3===0?'#c39167':p.color);
-      for(const side of [-1,1]){
-        for(let j=0;j<(lighter?2:3);j++){
-          const z=(j-1)*.075*k,reach=(.27+Math.sin(j*2)*.025)*k,wave=p.legWave*(j%2?1:-1)*side;
-          const joint=[side*reach,.035*k,z-.025+wave],tip=[side*(reach+.045*k),.012,z-.12+wave];
-          P.poly([[side*body,.05*k,z-.015],joint,[side*body,.05*k,z+.015]],'#976f51');
-          P.poly([joint,tip,[joint[0]-side*.022,joint[1],joint[2]+.015]],p.color);
-        }
-        const big=side===1?1.18:.88,cx=side*.21*k,cy=(.12+p.clawLift)*k,cz=.17*k;
-        P.poly([[side*.1*k,.06*k,.06*k],[cx,cy,cz],[cx-side*.045*k,cy+.022,cz+.015]],p.color);
-        P.poly([[cx-side*.052*k,cy,cz],[cx+side*.06*k*big,cy+.04*k,cz+.06*k],[cx+side*.045*k*big,cy+.06*k,cz+.14*k],[cx-side*.025*k,cy+.035*k,cz+.09*k]],'#c38b60');
-        P.poly([[cx+side*.045*k,cy+.06*k,cz+.14*k],[cx+side*.075*k,cy+.035*k,cz+.1*k],[cx+side*.06*k,cy+.015*k,cz+.18*k]],p.color);
-        if(!lighter){
-          const ex=side*.062*k;
-          P.poly([[ex-.012,top-.012,.055*k],[ex+.012,top-.012,.055*k],[ex+.01,top+.055*k,.075*k],[ex-.009,top+.055*k,.075*k]],'#6a6750');
-          P.poly([[ex-.016,top+.035*k,.08*k],[ex+.016,top+.035*k,.08*k],[ex+.015,top+.061*k,.08*k],[ex-.015,top+.061*k,.08*k]],'#344f4c');
-        }
-      }
-    });
+    var clip=p.phase==='retreat'?'Retreat':p.phase==='emerge'?'Emerge':reducedMotion?'Idle':'Scuttle';
+    // Presentation consumes the same four existing poses/AI, never owns travel,
+    // reaction radii, quiet timers or save. One authored species, shared geometry.
+    P.shadow(p.x,p.z,.2*p.scale,.15*p.scale,p.y+.006);
+    P.drawAuthored('crab',p.id,{position:[p.x,p.y,p.z],heading:p.heading,scale:p.scale,clip:clip,speed:reducedMotion?0:1});
   }
   function draw(P,controller,env={}){
     const s=states.get(controller)||states.get(resting),lighter=(P.quality||env.quality||s.quality)==='lighter';
     keep(P,'coast:tideline:1:'+Number(lighter),()=>tideDetails(P,lighter));
-    keep(P,'coast:crab-shelters:1:'+Number(lighter),()=>crabShelters(P,lighter));
+    keep(P,'coast:crab-shelters:2:'+Number(lighter),()=>crabShelters(P,lighter));
     // No P.tag call: gulls and tiny shore details never intercept game actions.
     for(const b of s.birds)gull(P,pose(b,s),lighter);
-    for(const c of s.crabs)crab(P,crabPose(c,s),lighter);
+    for(const c of s.crabs)crab(P,crabPose(c,s),lighter,s.reducedMotion);
   }
   G.CloseCoast=Object.freeze({create,update,snapshot,points,draw,rules,crabRules});
 })(globalThis);

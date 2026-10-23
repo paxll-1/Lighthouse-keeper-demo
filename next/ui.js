@@ -43,7 +43,7 @@
     if(a.type==="saw")return s.carry.amount?busy(s):a.reason;
     if(a.type==="repair"){
       if(s.carry.amount&&s.carry.kind!=="boards")return busy(s)+" Бревно можно распилить на верстаке.";
-      var required=a.id==="stairs"?C.stairsBoards:C.repairBoards,held=s.carry.kind==="boards"?s.carry.amount:0;
+      var required=a.id==="gallery-repair"?C.gallery.repairBoards:a.id==="stairs"?C.stairsBoards:C.repairBoards,held=s.carry.kind==="boards"?s.carry.amount:0;
       return "В руках не хватает "+genitive(Math.max(0,required-held),"boards")+". "+(s.boards>0?"Доски можно взять из навеса.":"Доски получаются из бревна на верстаке.");
     }
     if(a.type==="collect"&&a.reason.indexOf("Руки заняты")===0)return busy(s)+" Бревно останется на месте.";
@@ -57,6 +57,8 @@
     else if(a.type==="saw"){label="Распилить бревно";object="Верстак";detail="Распилится бревно из рук. Доски останутся в руках.";preview="Получится "+material(C.boardsPerLog,"boards")+" в руках.";}
     else if(id==="repair"){label="Починить ступень";object="Ступень у дома";detail="Потребуется "+material(C.repairBoards,"boards")+" из рук.";preview="Ступень будет целой. Можно будет зажечь маяк.";}
     else if(id==="stairs"){object="Спуск к берегу";detail="Потребуется "+material(C.stairsBoards,"boards")+" из рук. Это необязательное дело.";preview="Откроется короткий путь к берегу.";}
+    else if(id==="gallery-repair"){object="Галерея маяка";detail="Стоимость: "+material(C.gallery.repairBoards,"boards")+" из рук. Восстановятся настил и перила.";preview="Откроется дневной обзор с галереи маяка.";}
+    else if(id==="gallery-view"){object="Галерея маяка";detail="Дневной обзор острова и берега. Можно осмотреться и воспользоваться биноклем.";preview="Смотритель поднимется на готовую площадку.";}
     else if(a.type==="light"){label=a.done?"Огонь зажжён":"Зажечь маяк";object="Маяк";detail="Огонь можно зажечь после ремонта ступени у дома.";preview="В фонаре маяка загорится огонь.";}
     else if(a.type==="rest"){object="Скамья у моря";detail="Во время отдыха день не проходит.";preview="Смотритель присядет у моря.";}
     else if(a.type==="shed"){label="Открыть навес";object="Навес";detail=stock(s,"logs")+" · "+stock(s,"boards");preview="Можно сложить или взять материалы.";}
@@ -69,6 +71,7 @@
     }
     var out={id:a.id,label:label,object:object,reason:reason(s,a,kind),detail:detail,resultPreview:preview,available:a.available,done:a.done,type:a.type,amount:a.amount};
     if(a.type==="upgrade"){out.cost=detail;out.capacityPreview=upgradeCapacity(s);}
+    if(id==="gallery-repair")out.cost="Стоимость: "+material(C.gallery.repairBoards,"boards")+" из рук";
     return out;
   }
   // s is the completed state; amount is the finish result, not remaining stock
@@ -80,6 +83,7 @@
     if(type==="upgrade")return expansion(M.capacity(s));
     if(id==="repair")return "Ступень починена. Теперь можно зажечь маяк.";
     if(id==="stairs")return "Спуск восстановлен. Короткий путь к берегу открыт.";
+    if(id==="gallery-repair")return "Галерея восстановлена: настил и перила готовы. Открыт дневной обзор острова и берега.";
     if(type==="chop")return "Дерево срублено. Бревно осталось у пня.";
     if(type==="collect")return cargo(s)+". Можно отнести бревно к верстаку или в навес.";
     if(type==="saw")return cargo(s)+". Можно отнести доски к ремонту или в навес.";

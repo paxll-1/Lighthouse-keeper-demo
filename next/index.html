@@ -4,9 +4,9 @@
 <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <meta name="color-scheme" content="light">
 <link rel="icon" href="data:,">
-<meta name="lighthouse-build" content="island-coast-2026-10-23-r1">
+<meta name="lighthouse-build" content="island-art-foundation-2026-10-23-r1">
 <title>Маяк · Демка</title>
-<link rel="stylesheet" href="./ui.css?build=island-coast-2026-10-23-r1">
+<link rel="stylesheet" href="./ui.css?build=island-art-foundation-2026-10-23-r1">
 </head>
 <body>
 <main class="game" id="game" aria-busy="true" data-input="mouse" data-panel="none" data-ui-mode="walk" data-ui-detail="none">
@@ -102,11 +102,16 @@
 
     <section class="context" id="context" aria-labelledby="context-title" data-state="normal" hidden>
       <div class="context-copy" role="status" aria-live="polite" aria-atomic="true"><strong id="context-title">Остров ждёт</strong><p id="context-detail">Нажми на дерево или плавник у берега — смотритель подойдёт.</p></div>
-      <div class="context-commands"><button id="context-command" type="button" class="primary" aria-describedby="context-detail" hidden>Начать</button><span id="context-key" class="keyboard-only context-key" hidden>или <kbd>E</kbd></span><button id="pause-work" type="button" class="primary" hidden>Пауза</button></div>
+      <div class="context-commands"><button id="context-command" type="button" class="primary" aria-describedby="context-detail" hidden>Начать</button><span id="context-key" class="keyboard-only context-key" hidden>или <kbd>E</kbd></span><button id="gallery-select" type="button" aria-label="Выбрать смотровую галерею маяка" hidden>Галерея</button><button id="pause-work" type="button" class="primary" hidden>Пауза</button></div>
     </section>
 
   </div>
 <aside class="save" id="save" role="alert" hidden><div class="save-copy"><span class="status-symbol" aria-hidden="true">!</span><span class="save-message" id="save-message">Запись недоступна. Прогресс пока здесь.</span></div><button id="save-dismiss" type="button">Прочитано</button></aside>
+  <section id="gallery-panel" class="gallery-panel" aria-labelledby="gallery-title" hidden>
+    <header class="gallery-heading"><button id="gallery-exit" type="button" class="gallery-exit" aria-label="Спуститься с галереи" aria-keyshortcuts="Escape"><span aria-hidden="true">↓</span> Спуститься</button><h2 id="gallery-title">Галерея маяка</h2></header>
+    <button id="gallery-binoculars" type="button" class="gallery-binoculars" aria-keyshortcuts="E">Смотреть в бинокль <span class="keyboard-only">· E</span></button>
+    <p class="sr-only">Дневной обзор с галереи. Смотритель не ходит по высоте. Достаньте бинокль для приближения; Escape или «Спуститься» вернёт прежнюю камеру у основания маяка.</p>
+  </section>
   <section class="tool-panel" id="tool-panel" aria-labelledby="tool-title" data-mode="none" hidden>
     <h2 class="sr-only" id="tool-title">Бинокль</h2><p class="sr-only" id="tool-status" role="status" aria-live="polite" hidden></p>
     <div class="binocular-mask" aria-hidden="true"><svg viewBox="0 0 1000 1000" preserveAspectRatio="none" focusable="false"><defs><path id="binocular-aperture" d="M500 80C448 45 390 20 310 20C130 20 10 180 10 500S130 980 310 980C390 980 448 955 500 920C552 955 610 980 690 980C870 980 990 820 990 500S870 20 690 20C610 20 552 45 500 80Z"/><mask id="binocular-aperture-mask" maskUnits="userSpaceOnUse" x="0" y="0" width="1000" height="1000"><rect width="1000" height="1000" fill="white"/><use href="#binocular-aperture" fill="black"/></mask></defs><rect class="binocular-shade" width="1000" height="1000" mask="url(#binocular-aperture-mask)"/><use class="binocular-rim" href="#binocular-aperture" vector-effect="non-scaling-stroke"/></svg></div>
@@ -138,6 +143,6 @@
 <dialog id="restart-dialog" class="confirm-dialog" aria-labelledby="restart-title"><div class="dialog-content"><span class="eyebrow">Новое начало</span><h2 id="restart-title">Начать это утро заново?</h2><p>Ремонт и припасы этой пробы будут заменены начальным состоянием.</p></div><div class="dialog-actions"><button id="restart-cancel" type="button">Остаться здесь</button><button id="restart-confirm" class="primary" type="button">Начать заново</button></div></dialog>
 
 <section id="boot-status" class="boot-status" role="status" aria-live="polite"><svg class="boot-mark" viewBox="0 0 48 48" aria-hidden="true"><path d="m18 38 2-23h8l2 23M16 38h16M19 15h10M21 15V9h6v6M18 9l6-4 6 4M8 12l6 2m20 0 6-2M6 23l8-2m20 0 8 2"/></svg><h1>Остров смотрителя</h1><p id="boot-message">Готовим остров…</p><a id="legacy-link" href="./" hidden>Вернуться к демке</a></section>
-<script type="module" src="./bootstrap.js?build=island-coast-2026-10-23-r1"></script>
+<script type="module" src="./bootstrap.js?build=island-art-foundation-2026-10-23-r1"></script>
 </body>
 </html>

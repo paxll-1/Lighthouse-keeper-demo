@@ -8,7 +8,7 @@
   function cargo(s){return s.carry||emptyCarry();}
   function held(s,kind){var c=cargo(s);return c.kind===kind?c.amount:0;}
   function capacity(s){return C.shed.capacity[s.shedLevel||0];}
-  function create(){return {version:C.version,avatar:clone(C.start),logs:0,boards:0,carry:emptyCarry(),shedLevel:0,repaired:false,lit:false,stairs:false,daylight:.12,trees:C.trees.map(function(t){return Object.assign({},t,{felled:false,collected:false});}),shore:C.shore.map(function(t){return Object.assign({},t,{collected:false});}),progress:{},stats:{chopped:0,sawn:0,collected:0}};}
+  function create(){return {version:C.version,avatar:clone(C.start),logs:0,boards:0,carry:emptyCarry(),shedLevel:0,repaired:false,lit:false,stairs:false,galleryRepaired:false,daylight:.12,trees:C.trees.map(function(t){return Object.assign({},t,{felled:false,collected:false});}),shore:C.shore.map(function(t){return Object.assign({},t,{collected:false});}),progress:{},stats:{chopped:0,sawn:0,collected:0}};}
   function tree(s,id){return s.trees.find(function(t){return t&&t.id===id;});}
   function info(s,id){
     var a={id:id,type:"",x:0,z:0,faceX:0,faceZ:0,label:"",reason:"",seconds:0,done:false,amount:0};
@@ -19,6 +19,14 @@
     else if(id==="saw"){a.type="saw";a.x=C.bench.x+.75;a.z=C.bench.z+1.25;a.faceX=C.bench.x+.75;a.faceZ=C.bench.z;a.label="Распилить принесённое бревно";if(held(s,"logs")<1)a.reason=s.logs>0?"Возьми бревно из навеса и принеси к верстаку.":"Принеси бревно: из рощи или с берега.";}
     else if(id==="repair"){a.type="repair";a.x=C.step.x;a.z=C.step.z+1.15;a.faceX=C.step.x;a.faceZ=C.step.z;a.label="Починить ступень у дома";a.done=s.repaired;if(s.repaired)a.reason="Ступень починена";else if(held(s,"boards")<C.repairBoards)a.reason="Принеси "+C.repairBoards+" доски в руках: с верстака или из навеса.";}
     else if(id==="stairs"){a.type="repair";a.x=C.stairs.x;a.z=C.stairs.z-1.05;a.faceX=C.stairs.x;a.faceZ=C.stairs.z;a.label="Восстановить спуск";a.done=!!s.stairs;if(s.stairs)a.reason="Спуск восстановлен";else if(held(s,"boards")<C.stairsBoards)a.reason="Принеси "+C.stairsBoards+" доски в руках: с верстака или из навеса.";}
+    else if(id==="gallery-repair"||id==="gallery-view"){
+      a.x=C.gallery.approach.x;a.z=C.gallery.approach.z;a.faceX=C.lighthouse.x;a.faceZ=C.lighthouse.z;
+      if(id==="gallery-repair"){
+        a.type="repair";a.label="Восстановить галерею";a.done=s.galleryRepaired===true;
+        if(a.done)a.reason="Галерея восстановлена";
+        else if(held(s,"boards")<C.gallery.repairBoards)a.reason="Принеси "+C.gallery.repairBoards+" доски в руках: с верстака или из навеса.";
+      }else {a.type="view";a.label="Подняться на галерею";if(s.galleryRepaired!==true)a.reason="Сначала восстанови галерею: настил и перила.";}
+    }
     else if((parts[0]==="store"||parts[0]==="take"||parts[0]==="shed")&&(kind==="logs"||kind==="boards"||id==="shed:upgrade")){
       if(kind==="upgrade"&&parts[0]!=="shed")return null;
       var zone=C.shed.zones[kind];a.x=zone.x;a.z=zone.z;a.faceX=5.4;a.faceZ=kind==="upgrade"?-3.08:zone.z;a.type=parts[0]==="shed"?(kind==="upgrade"?"upgrade":"shed"):parts[0];
@@ -38,17 +46,18 @@
     else if(id==="rest"){a.type="rest";a.x=C.seat.x-1;a.z=C.seat.z;a.faceX=a.x-1;a.faceZ=a.z;a.label="Присесть у моря";}
     else if(id==="light"){a.type="light";a.x=C.lighthouse.x;a.z=C.lighthouse.z+1.7;a.faceX=C.lighthouse.x;a.faceZ=C.lighthouse.z;a.label=s.lit?"Огонь уже горит":"Зажечь вечерний огонь";a.done=s.lit;if(!s.repaired)a.reason="Сначала почини ступень у дома";else if(s.lit)a.reason="Маяк светит";}
     else return null;
-    a.seconds=a.type==="rest"||a.type==="shed"?0:id==="stairs"?C.workSeconds.stairs:C.workSeconds[a.type];a.progress=s.progress[id]||0;a.available=!a.reason;return a;
+    a.seconds=a.type==="rest"||a.type==="shed"||a.type==="view"?0:id==="gallery-repair"?C.gallery.repairSeconds:id==="stairs"?C.workSeconds.stairs:C.workSeconds[a.type];a.progress=s.progress[id]||0;a.available=!a.reason;return a;
   }
   function finish(s,id){
     if(!s||s.version!==C.version||!valid(s))return {ok:false,state:s,reason:"Состояние не прочитано. Материалы не изменены."};
-    var a=info(s,id);if(!a||!a.available||a.type==="rest"||a.type==="shed")return {ok:false,state:s,reason:a?a.reason:"Неизвестное дело."};
+    var a=info(s,id);if(!a||!a.available||a.type==="rest"||a.type==="shed"||a.type==="view")return {ok:false,state:s,reason:a?a.reason:"Неизвестное дело."};
     var n=clone(s),t=tree(n,String(id).split(":")[1]),kind=String(id).split(":")[1];
     if(a.type==="chop"){t.felled=true;n.stats.chopped++;}
     if(a.type==="collect"){if(t)t.collected=true;else n.shore.find(function(v){return v.id===kind;}).collected=true;n.carry={kind:"logs",amount:C.logsPerTree};n.stats.collected++;}
     if(a.type==="saw"){n.carry={kind:"boards",amount:C.boardsPerLog};n.stats.sawn++;}
     if(id==="repair"){n.carry.amount-=C.repairBoards;n.repaired=true;}
     if(id==="stairs"){n.carry.amount-=C.stairsBoards;n.stairs=true;}
+    if(id==="gallery-repair"){n.carry.amount-=C.gallery.repairBoards;n.galleryRepaired=true;}
     if(a.type==="store"){n[kind]+=a.amount;n.carry.amount-=a.amount;}
     if(a.type==="take"){n[kind]-=a.amount;n.carry={kind:kind,amount:held(s,kind)+a.amount};}
     if(a.type==="upgrade"){n.boards-=C.shed.upgradeBoards;n.shedLevel++;}
@@ -67,12 +76,13 @@
     // Preserve the old independent limits and accepted shapes before migration.
     if(legacy?(!Number.isInteger(s.logs)||s.logs<0||s.logs>total||!Number.isInteger(s.boards)||s.boards<0||s.boards>total*C.boardsPerLog):(!count(s.logs)||!count(s.boards)))return false;
     if(typeof s.repaired!=="boolean"||typeof s.lit!=="boolean"||!Number.isFinite(s.daylight)||s.daylight<0||s.daylight>1)return false;
+    if(Object.prototype.hasOwnProperty.call(s,"galleryRepaired")&&typeof s.galleryRepaired!=="boolean")return false;
     if(!legacy&&(!s.carry||typeof s.carry!=="object"||Array.isArray(s.carry)||!Number.isInteger(s.shedLevel)||s.shedLevel<0||s.shedLevel>=C.shed.capacity.length||!Number.isSafeInteger(s.carry.amount)||s.carry.amount<0||(s.carry.amount===0?s.carry.kind!==null:((s.carry.kind!=="logs"&&s.carry.kind!=="boards")||s.carry.amount>C.carryLimit[s.carry.kind]))))return false;
     if(!Array.isArray(s.trees)||s.trees.length!==bases.length)return false;
     if(!bases.every(function(base){var t=s.trees.find(function(v){return v&&v.id===base.id;});return t&&t.x===base.x&&t.z===base.z&&typeof t.felled==="boolean"&&typeof t.collected==="boolean"&&(!t.collected||t.felled);}))return false;
     if(!v1&&(typeof s.stairs!=="boolean"||!Array.isArray(s.shore)||s.shore.length!==C.shore.length||!C.shore.every(function(b){var d=s.shore.find(function(v){return v&&v.id===b.id;});return d&&d.x===b.x&&d.z===b.z&&typeof d.collected==="boolean";})))return false;
     if(!s.progress||typeof s.progress!=="object"||Array.isArray(s.progress))return false;
-    if(!Object.keys(s.progress).every(function(k){var a=info(s,k);return a&&a.type!=="rest"&&a.type!=="shed"&&(!legacy||["store","take","upgrade"].indexOf(a.type)<0)&&(!v1||k!=="stairs")&&Number.isFinite(s.progress[k])&&s.progress[k]>=0&&s.progress[k]<1;}))return false;
+    if(!Object.keys(s.progress).every(function(k){var a=info(s,k);return a&&a.type!=="rest"&&a.type!=="shed"&&a.type!=="view"&&(!legacy||["store","take","upgrade"].indexOf(a.type)<0)&&(!v1||k!=="stairs")&&Number.isFinite(s.progress[k])&&s.progress[k]>=0&&s.progress[k]<1;}))return false;
     if(!s.stats||!["chopped","sawn","collected"].every(function(k){return legacy?Number.isInteger(s.stats[k])&&s.stats[k]>=0&&s.stats[k]<=(k==="chopped"?bases.length:total):count(s.stats[k]);}))return false;
     if(s.sync!==undefined&&(!s.sync||!Number.isInteger(s.sync.revision)||s.sync.revision<0||typeof s.sync.writer!=="string"||s.sync.writer.length>100))return false;
     return true;
@@ -81,6 +91,7 @@
     if(!validate(s))return null;var n;try{n=clone(s);}catch(e){return null;}
     if(s.version===1){n.stairs=false;n.shore=C.shore.map(function(d){return Object.assign({},d,{collected:false});});n.trees=n.trees.concat(C.trees.slice(3).map(function(t){return Object.assign({},t,{felled:false,collected:false});}));}
     if(s.version<3){n.version=C.version;n.carry=emptyCarry();n.shedLevel=0;}
+    if(!Object.prototype.hasOwnProperty.call(n,"galleryRepaired"))n.galleryRepaired=false;
     if(!walkable(n,n.avatar.x,n.avatar.z)){
       var best=null,distance=Infinity;
       for(var dx=-8;dx<=8;dx++)for(var dz=-8;dz<=8;dz++){var x=n.avatar.x+dx*.25,z=n.avatar.z+dz*.25,d=Math.hypot(dx,dz);if(d<distance&&walkable(n,x,z)){distance=d;best={x:x,z:z};}}

@@ -56,9 +56,9 @@
     changed=text($("tool-title"),mode==="lantern"?"Фонарь":"Бинокль")||changed;
     // The view can turn freely, so a selected destination is not a gaze label.
     changed=text($("tool-status"),"")||changed;changed=hidden($("tool-status"),true)||changed;
-    changed=text($("tool-close-label"),mode==="lantern"?"Убрать фонарь":"Выйти")||changed;
-    attr($("tool-close"),"aria-label",mode==="lantern"?"Убрать фонарь":"Выйти из бинокля");
-    attr($("tool-close"),"title",(mode==="lantern"?"Убрать фонарь":"Выйти из бинокля")+(view.keyboard()?" (Esc)":""));
+    changed=text($("tool-close-label"),mode==="lantern"?"Убрать фонарь":data.gallery?"На галерею":"Выйти")||changed;
+    attr($("tool-close"),"aria-label",mode==="lantern"?"Убрать фонарь":data.gallery?"Вернуться на галерею":"Выйти из бинокля");
+    attr($("tool-close"),"title",(mode==="lantern"?"Убрать фонарь":data.gallery?"Вернуться на галерею":"Выйти из бинокля")+(view.keyboard()?" (Esc)":""));
     attr($("tool-panel"),"aria-describedby",mode==="binoculars"?"binocular-instructions":"");
     changed=hidden($("tool-scroll"),mode!=="binoculars")||changed;
     // Walk destinations belong in the bag. Keep the old nodes for app bindings,

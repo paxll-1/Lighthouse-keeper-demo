@@ -1,0 +1,12 @@
+Lighthouse-keeper original model assets
+Copyright 2026 Lighthouse-keeper project owner.
+
+The geometry, rigging, animation and palette in this directory are original work
+created for this project in the VIS-002 task. The project owner may use, edit,
+reproduce and distribute these files, their source, and their derivatives,
+including as part of the game. No downloaded models, textures, marketplace
+assets or external image generation were used.
+
+License identifier: LicenseRef-LighthouseKeeper-Original.
+Blender is a separate production tool and is not included in the game assets.
+Third-party runtime code retains its own licenses outside this directory.

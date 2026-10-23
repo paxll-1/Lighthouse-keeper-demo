@@ -1,13 +1,17 @@
 (function(){
   "use strict";
   var uiModes=new CloseUIModes({onChange:modeChanged,onPending:modePending}),U=CloseUI,view=new CloseInterface(uiModes),M=CloseModel,C=M.config,$=function(id){return document.getElementById(id);},canvas=$("world"),P=new CloseRenderer(canvas);
+  // Assets are validated before any save reader/writer starts. The renderer
+  // owns native meshes/mixers; the game remains sole owner of progress and dt.
+  P.installAuthoredAssets(ThreeIslandPreview.authoredAssets);
+  delete ThreeIslandPreview.authoredAssets;
   var state=M.create(),job=null,hover=null,selectedTag=null,pointer={x:0,y:0},last=performance.now(),clock=0,walkPhase=0,stepSound=0,workSound=-1;
   var camera={x:C.start.x,y:.8,z:C.start.z,distance:C.camera.distance,yaw:C.camera.yaw,pitch:C.camera.pitch},distance=C.camera.distance,yaw=C.camera.yaw,pitch=C.camera.pitch,overview=false;
   var keys=new Set(),touches=new Map(),gesture=null,pinch=null,night=0,toastTimer,saveTimer=0;
   var revision=0,hasInitial=false,writer=Date.now().toString(36)+"-"+Math.random().toString(36).slice(2),KEY="lighthouse.close-work.storage.v1",LEGACY_KEY="lighthouse.close-work.v1",SLOT="closeIslandStorage",saveGood=true;
   var audio=null,master=null,ambient=null,windFilter=null,muted=false,lastSaved=0,audioAttempted=false,audioContexts=0,audioTick=-1,ambientGains=null,ambientLevels={wind:0,leaves:0,surf:0};
   var sitting=false,sitBlend=0,visited=new Set(),placeTimer=0,saveBlocked=false,saveMemoryOnly=false,shedOpen=false,shedRevealAt=0,panelNotice=null;
-  var gearUI=new CloseGear(view),coast=CloseCoast.create(),kit={bagOpen:false,mode:"none",zoom:1,point:CloseCoast.points[0].id,note:""},savedNormal=null,bagCamera=null,optics={eye:null,yaw:0,pitch:.1,zoom:1};
+  var gearUI=new CloseGear(view),coast=CloseCoast.create(),kit={bagOpen:false,mode:"none",zoom:1,point:CloseCoast.points[0].id,note:""},savedNormal=null,bagCamera=null,gallerySession=null,optics={eye:null,yaw:0,pitch:.1,zoom:1};
   var benchProbe=new CloseBenchProbe(view),benchEnabled=new URLSearchParams(location.search).get("workbench")!=="classic",benchState={reason:"",reasonUntil:0,result:"",resultUntil:0,selectedAt:-Infinity,confirmedAt:-Infinity,confirmPoint:null,focused:false},benchHit=null,benchPointer=null,benchPointerClickUntil=0;
   var hostEnvelope=Object.assign({},globalThis.openai&&globalThis.openai.widgetState||{});
   var motionPreference=matchMedia("(prefers-reduced-motion: reduce)"),reducedMotion=motionPreference.matches,manualCamera=false,resultView=null,contextKey="",lastFrame=0,bottomHeight=110,coarsePointer=matchMedia("(pointer:coarse)").matches,fullscreenPending=false;
@@ -85,6 +89,7 @@
     if(tag.indexOf("tree:")===0)return "chop:"+tag.slice(5);
     if(tag.indexOf("logs:")===0)return "collect:"+tag.slice(5);
     if(tag.indexOf("drift:")===0||tag.indexOf("shed:")===0)return tag;
+    if(tag==="gallery")return state.galleryRepaired?"gallery-view":"gallery-repair";
     return {workshop:"saw",bench:"saw",step:"repair",lighthouse:"light",stairs:"stairs",seat:"rest"}[tag]||null;
   }
   function shedTag(tag){return !!tag&&tag.indexOf("shed:")===0;}
@@ -103,14 +108,15 @@
   function modeChanged(next,previous,meta){
     if(!view||!kit)return;
     clearUIInput();
-    if(previous.mode==="binoculars"&&next.mode!=="binoculars"){restoreNormal(savedNormal);savedNormal=null;kit.mode="none";P.observation=null;}
-    if(previous.mode==="bag"&&next.mode!=="bag"){if(next.mode!=="binoculars")restoreNormal(bagCamera);bagCamera=null;}
+    if(next.mode==="walk"&&gallerySession)finishGallery();
+    if(previous.mode==="binoculars"&&next.mode!=="binoculars"){if(!gallerySession)restoreNormal(savedNormal);savedNormal=null;kit.mode="none";P.observation=null;}
+    if(previous.mode==="bag"&&next.mode!=="bag"){if(next.mode!=="binoculars"&&!gallerySession)restoreNormal(bagCamera);bagCamera=null;}
     kit.bagOpen=next.mode==="bag";shedOpen=next.mode==="shed";
     if(job&&(next.mode!=="walk"||previous.mode==="shed"))pause(true);
     if(previous.mode==="shed"&&next.mode!=="shed")panelNotice=null;
     [["help-dialog","help"],["restart-dialog","confirm"]].forEach(function(pair){var d=$(pair[0]);if(next.mode===pair[1]){if(!d.open)d.showModal();}else if(d.open)d.close();});
     view.syncMode();renderGear();view.invalidate();
-    var focus=next.mode==="bag"?"bag-close":next.mode==="menu"?"menu-close":next.mode==="help"?"help-close":next.mode==="confirm"?"restart-cancel":next.mode==="shed"?(next.detail?"shed-details-back":"shed-close"):next.mode==="binoculars"?(next.detail?"binocular-places-back":"world"):"world";
+    var focus=next.mode==="bag"?"bag-close":next.mode==="menu"?"menu-close":next.mode==="help"?"help-close":next.mode==="confirm"?"restart-cancel":next.mode==="shed"?(next.detail?"shed-details-back":"shed-close"):next.mode==="binoculars"?(next.detail?"binocular-places-back":"world"):next.mode==="gallery"?"gallery-binoculars":"world";
     if(meta&&meta.reason==="detail"&&next.mode==="bag")focus="bag-places-back";
     if($(focus))$(focus).focus({preventScroll:true});
     if(next.mode==="help"&&previous.mode!=="help"){$("help-dialog").scrollTop=0;$("help-dialog").querySelector(".dialog-content").scrollTop=0;}
@@ -123,15 +129,26 @@
   function coastPoint(id){return CloseCoast.points.find(function(p){return p.id===(id||kit.point);})||CloseCoast.points[0];}
   function captureNormal(){return {camera:Object.assign({},camera),targetDistance:distance,targetYaw:yaw,targetPitch:pitch,overview:overview,manual:manualCamera};}
   function restoreNormal(saved){if(!saved)return;Object.assign(camera,saved.camera);distance=saved.targetDistance;yaw=saved.targetYaw;pitch=saved.targetPitch;overview=saved.overview;manualCamera=saved.manual;$("overview").setAttribute("aria-pressed",String(overview));}
-  function renderGear(){gearUI.render({bagOpen:kit.bagOpen,mode:kit.mode,zoom:optics.zoom,minZoom:1,maxZoom:7,point:coastPoint(),cargo:cargoText(),points:CloseCoast.points,status:kit.note});}
+  function renderGear(){gearUI.render({bagOpen:kit.bagOpen,mode:kit.mode,zoom:optics.zoom,minZoom:1,maxZoom:7,point:coastPoint(),cargo:cargoText(),points:CloseCoast.points,status:kit.note,gallery:!!gallerySession});}
   function closeTools(focus,keepUI){
     var wasOpen=kit.bagOpen||kit.mode!=="none";
-    if(kit.mode==="binoculars")restoreNormal(savedNormal);else if(kit.bagOpen)restoreNormal(bagCamera);
+    if(!gallerySession){if(kit.mode==="binoculars")restoreNormal(savedNormal);else if(kit.bagOpen)restoreNormal(bagCamera);}
     kit.mode="none";kit.note="";savedNormal=null;bagCamera=null;P.observation=null;P.lantern=null;clearUIInput();
-    if(!keepUI&&(uiModes.is("bag")||uiModes.is("binoculars")))uiModes.reset("tool-close");
+    if(!keepUI&&(uiModes.is("bag")||uiModes.is("binoculars")))uiModes.back("tool-close");
     kit.bagOpen=uiModes.is("bag");renderGear();view.invalidate();
     if(wasOpen&&focus!==false)canvas.focus({preventScroll:true});
   }
+  function finishGallery(){
+    if(!gallerySession)return;var normal=gallerySession.normal;gallerySession=null;restoreNormal(normal);savedNormal=null;bagCamera=null;P.observation=null;kit.mode="none";clearUIInput();
+  }
+  function enterGallery(){
+    var a=M.info(state,"gallery-view");if(saveBlocked||job||!a||!a.available||Math.hypot(state.avatar.x-a.x,state.avatar.z-a.z)>C.interactionReach||!M.clear(state,state.avatar,a)){notify(a&&a.reason||"Подойди к основанию маяка.");return;}
+    closeTools(false,true);pause(true);clearNotice();clearUIInput();resultView=null;
+    var eye=C.gallery.eye,look=C.gallery.look;
+    gallerySession={normal:captureNormal(),eye:eye.slice(),yaw:Math.atan2(eye[0]-look.x,eye[2]-look.z),pitch:Math.max(-.15,Math.min(.55,Math.atan2(eye[1]-look.y,Math.hypot(look.x-eye[0],look.z-eye[2]))))};
+    uiModes.open("gallery");renderGear();view.invalidate();
+  }
+  function galleryCamera(){var safe=view.layout();P.observation={eye:gallerySession.eye,yaw:gallerySession.yaw,pitch:gallerySession.pitch,zoom:1,centerX:safe.centerX,centerY:safe.centerY};}
   function openBag(){
     if(uiModes.snapshot().pending)return;
     unlock();if(uiModes.is("bag")){uiModes.back("bag-toggle");return;}
@@ -145,8 +162,9 @@
   }
   function useTool(mode){
     if((mode!=="lantern"&&mode!=="binoculars")||uiModes.snapshot().pending)return;
+    if(mode==="lantern"&&gallerySession){uiModes.reset("gallery-lantern");kit.mode="lantern";kit.note="";renderGear();view.invalidate();notify("Фонарь включён у основания маяка.");canvas.focus({preventScroll:true});return;}
     var normal=bagCamera||savedNormal||captureNormal();closeTools(false,true);restoreNormal(normal);pause(true);clearUIInput();resultView=null;kit.mode=mode;kit.note="";
-    if(mode==="binoculars"){savedNormal=normal;var a=actorPosition();optics.eye=[a.x,M.height(a.x,a.z)+1.65,a.z];optics.zoom=kit.zoom;uiModes.open("binoculars");aimPoint(kit.point);}
+    if(mode==="binoculars"){savedNormal=gallerySession?null:normal;var a=actorPosition();optics.eye=gallerySession?gallerySession.eye.slice():[a.x,M.height(a.x,a.z)+1.65,a.z];optics.zoom=kit.zoom;if(gallerySession){optics.yaw=gallerySession.yaw;optics.pitch=gallerySession.pitch;}uiModes.open("binoculars");if(!gallerySession)aimPoint(kit.point);}
     else uiModes.reset("lantern-equip");
     renderGear();view.invalidate();canvas.focus({preventScroll:true});
   }
@@ -186,7 +204,7 @@
     if(job){if(job.working)state.progress[job.id]=Math.min(.999999,job.elapsed/job.action.seconds);job=null;persist();}
   }
   function walk(to,intent,arrivalTag){
-    if(saveBlocked)return;if(kit.bagOpen||kit.mode==="binoculars"||intent)closeTools(false);sitting=false;resultView=null;if(uiModes.is("shed")&&!(intent&&["store","take","upgrade"].indexOf(intent.type)>=0))uiModes.reset("walk");shedOpen=uiModes.is("shed");
+    if(saveBlocked)return;if(gallerySession)uiModes.reset("gallery-travel");if(kit.bagOpen||kit.mode==="binoculars"||intent)closeTools(false);sitting=false;resultView=null;if(uiModes.is("shed")&&!(intent&&["store","take","upgrade"].indexOf(intent.type)>=0))uiModes.reset("walk");shedOpen=uiModes.is("shed");
     var path=Math.hypot(state.avatar.x-to.x,state.avatar.z-to.z)<.001?[]:M.path(state,state.avatar,to);if(!path){pause(true);refresh();notify("Здесь не пройти. Выбери тропинку рядом.");return;}
     clearNotice();pause(true);job={id:intent?intent.id:null,action:intent,path:path,working:false,elapsed:0,arrivalTag:arrivalTag||null};overview=false;$("overview").setAttribute("aria-pressed","false");
     persist();refresh();
@@ -195,6 +213,7 @@
   function approach(tag){
     if(saveBlocked)return;
     if(tag==="workshop")tag="bench";
+    if(tag==="lighthouse"&&state.lit)tag="gallery";
     var id=actionForTag(tag),a=navAction(tag);if(!a)return;
     selectedTag=tag;if(benchEnabled&&tag==="bench"){benchState.selectedAt=clock;benchState.reason="";benchState.result="";}
     if(job&&job.id===id&&job.working){pause(true);refresh();return;}
@@ -207,6 +226,7 @@
     unlock();if(saveBlocked)return;closeTools(false);if(shedTag(tag)){openShed();return;}var id=actionForTag(tag),a=id?M.info(state,id):null;if(!a)return;
     if(job&&job.id===id&&job.working){pause(false);refresh();return;}
     if(!a.available){if(benchEnabled&&tag==="bench"){benchState.reason=U.action(state,id).reason;benchState.reasonUntil=clock+4;renderBench(contextAction());}else notify(U.action(state,id).reason);return;}
+    if(a.type==="view"){enterGallery();return;}
     if(a.type==="rest"){clearNotice();pause(true);setResting(!sitting);refresh();return;}
     walk({x:a.x,z:a.z},a);
   }
@@ -217,6 +237,7 @@
     $("day").textContent=state.lit?"Вечерний огонь":state.daylight>.6?"Тёплый вечер":state.daylight>.32?"День у моря":"Утро у моря";
   }
   function update(dt){
+    P.updateAuthored(dt);
     clock+=dt;night+=( (state.lit?1:0)-night)*Math.min(1,dt*.8);
     if(!reducedMotion)islandTime+=dt;
     var pulse=.5-.5*Math.cos(islandTime*.48);wind.strength=.25+.55*pulse*pulse*pulse+.08*Math.sin(islandTime*1.3);placeAudio();
@@ -229,6 +250,7 @@
       optics.pitch=Math.max(-.15,Math.min(.55,optics.pitch+((keys.has("ArrowDown")||keys.has("KeyS")?1:0)-(keys.has("ArrowUp")||keys.has("KeyW")?1:0))*dt*.35*fineAim));
       observationCamera();P.camera(camera,camera.distance,camera.yaw,camera.pitch);return false;
     }
+    if(gallerySession){keys.clear();galleryCamera();P.camera(camera,camera.distance,camera.yaw,camera.pitch);return false;}
     P.observation=null;
     if(uiModes.blocksWorld())keys.clear();
     var kx=(keys.has("ArrowRight")||keys.has("KeyD")?1:0)-(keys.has("ArrowLeft")||keys.has("KeyA")?1:0),kz=(keys.has("ArrowDown")||keys.has("KeyS")?1:0)-(keys.has("ArrowUp")||keys.has("KeyW")?1:0),moving=false;
@@ -297,44 +319,19 @@
   function actorPosition(){return {x:state.avatar.x+(C.seat.x-state.avatar.x)*sitBlend,z:state.avatar.z+(C.seat.z-state.avatar.z)*sitBlend,heading:sitBlend>.1?C.seat.heading:state.avatar.heading};}
   function areaName(){var x=state.avatar.x,z=state.avatar.z;if(x>17)return "Крабовая бухта";if(x>14.5&&z<3.2)return "Каменный проход";if(Math.hypot(x-5,z-9.6)<2)return "Старый причал";if(Math.hypot(x+12,z+4.6)<2.4)return "Видовая площадка";if(z>5.8&&x>1)return "Каменистый берег";if(x<-7.5&&z>-2)return "Тихая роща";return null;}
   function keeper(moving){
-    var a=actorPosition(),w=job&&job.working?job:null,t=w?w.action.type:null,cycle=w?w.elapsed*1.5:0,swing=Math.sin(cycle*Math.PI*2)*(reducedMotion?.25:1),stride=moving?Math.sin(walkPhase)*(reducedMotion?.2:.5):0,seated=sitBlend>.5,carry=state.carry.amount>0&&(!w||t==="store"||t==="take"),handover=t==="store"?Math.max(0,(w.elapsed/w.action.seconds-.35)/.65):0;
-    P.shadow(a.x,a.z,.44,.34,M.height(a.x,a.z)+.012);
-    P.tag("keeper",function(){P.group({x:a.x,y:M.height(a.x,a.z)+(moving?Math.abs(Math.sin(walkPhase))*.035:(reducedMotion?0:Math.sin(clock*1.7)*.004)),z:a.z,ry:a.heading},function(){
-      if(seated){[-.17,.17].forEach(function(x){P.cylinder(x,.49,.18,.105,.11,.43,"#435657",8);P.box(x,.25,.4,.18,.4,.2,"#435657");P.blob(x,.07,.5,.14,.105,.24,"#304744");});}
-      else [-1,1].forEach(function(side){
-        var angle=stride*side;
-        P.group({x:side*.17,y:.72,z:0,rx:angle},function(){
-          P.cylinder(0,-.15,0,.105,.1,.34,"#485b5a",8);
-          P.group({y:-.32,rx:moving?Math.max(0,-angle)*.65:0},function(){P.cylinder(0,-.13,0,.1,.09,.28,"#3d5352",8);P.box(0,-.285,.075,.22,.13,.32,"#2e4542");P.blob(0,-.265,.17,.127,.09,.16,"#334c47");});
-        });
-      });
-      var lifting=t==="saw"&&w.elapsed/w.action.seconds>.86,hammer=t==="repair"||t==="upgrade";
-      P.group({y:seated?.62:.83,rx:t==="collect"||t==="take"||lifting?.46:t==="store"?.28*handover:hammer?.22:0},function(){
-        P.cylinder(0,.25,0,.3,.405,.78,"#c49643",12);
-        P.cylinder(0,-.127,0,.405,.414,.035,"#a47d3b",12);
-        P.poly([[-.12,-.1,-.38],[0,.63,-.26],[.13,-.1,-.38]],"#d4aa55");
-        P.poly([[-.03,-.1,.402],[-.02,.55,.28],[.022,.55,.28],[.03,-.1,.402]],"#9e7738");
-        P.box(0,.08,.36,.53,.035,.045,"#9b783b");
-        for(var button=0;button<3;button++)P.blob(.04,.18+button*.15,.344-button*.022,.024,.024,.017,"#e8c78a");
-        P.box(-.23,.1,.3,.14,.12,.035,"#b58d42");P.box(.23,.1,.3,.14,.12,.035,"#d1a551");
-        P.cylinder(0,.65,0,.19,.2,.13,"#3d6761",10);
-        P.blob(0,.88,-.015,.28,.315,.27,"#d4ac59");
-        P.blob(0,.87,.23,.17,.175,.055,"#3d5149");
-        P.poly([[-.24,.88,.2],[-.18,1.04,.22],[0,1.16,.19],[.18,1.04,.22],[.24,.88,.2],[.17,1.005,.255],[0,1.085,.255],[-.17,1.005,.255]],"#e5c781");
-        function arm(side,angle){P.group({x:side*.34,y:.53,z:.02,rx:angle,rz:side*.035},function(){
-          P.blob(0,-.03,0,.13,.17,.14,"#c69a4c");
-          P.cylinder(0,-.22,0,.104,.087,.37,side===1?"#b98d40":"#d1a34e",8);
-          P.cylinder(0,-.405,0,.09,.09,.055,"#e3bf73",8);P.blob(0,-.49,.025,.084,.1,.09,"#8d7e59");
-          if(t==="chop"&&side===1){P.cylinder(0,-.76,0,.035,.04,.7,"#927247",7);P.box(.08,-1.03,.025,.31,.17,.13,"#758d89");P.poly([[.2,-1.14,.1],[.2,-.94,.1],[.29,-.94,.02],[.3,-1.11,.02]],"#c4d5c6");}
-          if(hammer&&side===1){P.cylinder(0,-.65,.02,.034,.04,.37,"#9f7d47",7);P.box(0,-.84,.02,.28,.12,.13,"#8b9d91");}
-        });}
-        var armAngle=carry?-1.25+handover*.65:moving?-stride*.64:t==="chop"?-.65-swing*.85:t==="saw"?(lifting?-1.1:-1.88+swing*.12):hammer?-.8-swing*.5:t==="collect"||t==="take"?-1.25:-.1;
-        arm(1,armAngle);arm(-1,carry?-1.25+handover*.65:t==="saw"?-1.15:t==="collect"||t==="take"?-1.2:moving?stride*.64:-.12);
-      });
-      if(kit.mode==="lantern")P.group({x:-.39,y:.77,z:.05},function(){P.box(0,0,0,.16,.23,.14,"#c8a36e");P.box(0,.01,.075,.1,.14,.016,"#f6d487");P.cylinder(0,.16,0,.07,.07,.025,"#947e5b",6);});
-      if(carry&&state.carry.kind==="logs")P.group({x:0,y:(seated?.78:1.09)-handover*.32,z:.45+handover*.28,rz:Math.PI/2},function(){P.cylinder(0,0,0,.13,.14,1.15,"#926c46",9);P.cylinder(0,.58,0,.115,.115,.013,"#e6c78d",9);});
-      else if(carry&&state.carry.kind==="boards"){for(var plank=0;plank<state.carry.amount;plank++)P.box(0,(seated?.75:.96)+plank*.14-handover*.32,.46+handover*.28,1.08,.12,.27,plank?"#c6a36b":"#d3ad73");}
-    });});
+    var a=actorPosition(),w=job&&job.working?job:null,t=w?w.action.type:null;
+    var carrying=state.carry.amount>0&&(!w||t==="store"||t==="take"),clip="Idle",phase;
+    if(sitBlend>.5)clip="Sit";
+    else if(w){
+      clip=t==="chop"?"Chop":t==="saw"?"Saw":t==="repair"||t==="upgrade"?"Repair":t==="collect"||t==="take"||t==="store"?"Collect":"Idle";
+      // Existing game elapsed is authoritative; animation cannot grant resources.
+      phase=clip==="Collect"?Math.min(1,w.elapsed/w.action.seconds):(w.elapsed*1.5)%1;
+    }else if(moving){clip=carrying?"CarryWalk":"Walk";phase=(walkPhase/(Math.PI*2))%1;}
+    else if(carrying)clip="CarryIdle";
+    P.shadow(a.x,a.z,.36,.28,M.height(a.x,a.z)+.012);
+    P.drawAuthored("keeper","keeper",{position:[a.x,M.height(a.x,a.z),a.z],heading:a.heading,clip:clip,phase:phase,
+      speed:reducedMotion&&clip==="Idle"?0:1,props:{cargo:carrying?{kind:state.carry.kind,amount:state.carry.amount}:null,
+      tool:t==="chop"?"axe":t==="saw"?"saw":t==="repair"||t==="upgrade"?"hammer":null,lantern:kit.mode==="lantern"}});
   }
   function targetPoint(tag){
     if(!tag)return null;
@@ -344,14 +341,15 @@
     if(shedTag(tag)){var zone=C.shed.zones[tag.slice(5)];return zone?[5.4,tag==="shed:upgrade"?1.7:.9,tag==="shed:upgrade"?-3.08:zone.z]:null;}
     if(tag==="stairs")return [C.stairs.x,M.height(C.stairs.x,C.stairs.z)+.3,C.stairs.z];
     if(tag==="seat")return [C.seat.x,.8,C.seat.z];
+    if(tag==="gallery")return [C.lighthouse.x,5.45,C.lighthouse.z+1.5];
     return {workshop:[3.8,1.2,-4.3],bench:[3.8,1.2,-1.6],step:[-5,.35,-1.05],lighthouse:[10,1.2,-5.98]}[tag]||null;
   }
   function render(moving){
     P.begin(night,state.daylight,islandTime);
     var work={id:job&&job.working?job.id:null,type:job&&job.working?job.action.type:null,amount:job&&job.working?job.action.amount:0,progress:job&&job.working?Math.min(1,job.elapsed/job.action.seconds):0,cycle:job&&job.working?job.elapsed*1.5:0};
     var env={time:islandTime,wind:wind,night:night,work:work,reducedMotion:reducedMotion,hovered:hover,selected:job?job.id:null,coast:coast};CloseWorld.draw(P,state,env);CloseScene.draw(P,state,env);
-    var actor=actorPosition();if(kit.mode!=="binoculars")keeper(moving);
-    P.keeperFocus=kit.mode==="binoculars"?null:[actor.x,M.height(actor.x,actor.z)+1.1,actor.z];
+    var actor=actorPosition();if(kit.mode!=="binoculars"&&!gallerySession)keeper(moving);
+    P.keeperFocus=kit.mode==="binoculars"||gallerySession?null:[actor.x,M.height(actor.x,actor.z)+1.1,actor.z];
     P.lantern=kit.mode==="lantern"?{position:[actor.x,M.height(actor.x,actor.z)+.9,actor.z],strength:.7}:null;P.flush(hover);
     if(resultView&&clock-resultView.at<1.2){var age=(clock-resultView.at)/1.2;P.ring(resultView.x,resultView.z,"#f4df9be0",reducedMotion?.5:.35+age*.8,M.height(resultView.x,resultView.z)+.045);}
     if(job&&job.working&&!reducedMotion&&(job.action.type==="saw"||job.action.type==="repair")){
@@ -378,7 +376,7 @@
     canvas.style.cursor=gesture&&gesture.moved?"grabbing":hover&&actionForTag(hover)?"pointer":"grab";
     P.end();
   }
-  function frame(now){requestAnimationFrame(frame);if(document.hidden){last=now;return;}if(coarsePointer&&now-lastFrame<30)return;if(lastFrame>0)intervalSamples[sampleCursor]=now-lastFrame;lastFrame=now;var dt=Math.min(.05,(now-last)/1000);last=now;var start=performance.now(),moving=update(dt);render(moving);var cost=performance.now()-start;cpuSamples[sampleCursor]=cost;sampleCursor=(sampleCursor+1)%120;perfFrames++;perfTotal+=cost;
+  function frame(now){requestAnimationFrame(frame);if(document.hidden){last=now;return;}if(coarsePointer&&now-lastFrame<30)return;if(lastFrame>0)intervalSamples[sampleCursor]=now-lastFrame;lastFrame=now;var dt=Math.max(0,Math.min(.05,(now-last)/1000));last=now;var start=performance.now(),moving=update(dt);render(moving);var cost=performance.now()-start;cpuSamples[sampleCursor]=cost;sampleCursor=(sampleCursor+1)%120;perfFrames++;perfTotal+=cost;
     if(now-perfStart>=1000){perf={fps:perfFrames*1000/(now-perfStart),renderMs:perfTotal/perfFrames,sampleMs:now-perfStart,frames:perfFrames};perfStart=now;perfFrames=0;perfTotal=0;if(!$("performance-panel").hidden)$("performance-panel").textContent=Math.round(perf.fps)+" FPS · Кадр "+perf.renderMs.toFixed(1)+" мс\n"+(quality==="lighter"?"Легче":"Стандарт")+" · DPR "+P.pixelRatio+"\nТолько это устройство; не замер GPU";}
   }
   function resetPerformance(){perfStart=performance.now();perfFrames=0;perfTotal=0;cpuSamples=[];intervalSamples=[];sampleCursor=0;lastFrame=0;perf={fps:null,renderMs:null,sampleMs:0,frames:0};}
@@ -388,10 +386,10 @@
   new ResizeObserver(function(entries){bottomHeight=entries[0].contentRect.height;$('game').style.setProperty('--status-height',bottomHeight+'px');}).observe($('bottom-ui'));
   if(globalThis.visualViewport)visualViewport.addEventListener('resize',resize);
   function local(e){var r=canvas.getBoundingClientRect();return {x:e.clientX-r.left,y:e.clientY-r.top};}
-  function closeMenu(){if(uiModes.is("menu"))uiModes.reset("menu-close");view.syncMode();view.invalidate();}
+  function closeMenu(){if(uiModes.is("menu"))uiModes.back("menu-close");view.syncMode();view.invalidate();}
   function cameraGesture(){overview=false;$("overview").setAttribute("aria-pressed","false");}
   function rotate(dx,dy){if(kit.mode==="binoculars"){var fineAim=1/Math.max(1,optics.zoom);optics.yaw-=dx*.0035*fineAim;optics.pitch=Math.max(-.15,Math.min(.55,optics.pitch+dy*.003*fineAim));return;}manualCamera=true;cameraGesture();yaw-=dx*.006;pitch=Math.max(C.camera.pitchMin,Math.min(C.camera.pitchMax,pitch+dy*.004));}
-  canvas.addEventListener("pointerdown",function(e){if(uiModes.blocksWorld()||uiModes.recentlyClosed()){e.preventDefault();if(uiModes.blocksWorld()&&!uiModes.snapshot().pending)uiModes.back("outside");return;}if(benchEnabled&&job&&job.id==="saw"&&benchState.confirmPoint&&performance.now()-benchState.confirmedAt<350&&Math.hypot(e.clientX-benchState.confirmPoint.x,e.clientY-benchState.confirmPoint.y)<56){e.preventDefault();return;}unlock();closeMenu();if(kit.bagOpen)closeTools(false);canvas.focus({preventScroll:true});var p=local(e);touches.set(e.pointerId,p);canvas.setPointerCapture(e.pointerId);gesture={id:e.pointerId,start:p,last:p,moved:e.button===2||e.button===1};
+  canvas.addEventListener("pointerdown",function(e){if(uiModes.is("gallery")){e.preventDefault();canvas.focus({preventScroll:true});return;}if(uiModes.blocksWorld()||uiModes.recentlyClosed()){e.preventDefault();if(uiModes.blocksWorld()&&!uiModes.snapshot().pending)uiModes.back("outside");return;}if(benchEnabled&&job&&job.id==="saw"&&benchState.confirmPoint&&performance.now()-benchState.confirmedAt<350&&Math.hypot(e.clientX-benchState.confirmPoint.x,e.clientY-benchState.confirmPoint.y)<56){e.preventDefault();return;}unlock();closeMenu();if(kit.bagOpen)closeTools(false);canvas.focus({preventScroll:true});var p=local(e);touches.set(e.pointerId,p);canvas.setPointerCapture(e.pointerId);gesture={id:e.pointerId,start:p,last:p,moved:e.button===2||e.button===1};
     if(touches.size>=2){gesture.moved=true;if(touches.size===2){var arr=Array.from(touches.values());pinch={length:Math.hypot(arr[0].x-arr[1].x,arr[0].y-arr[1].y),distance:kit.mode==="binoculars"?kit.zoom:overview?camera.distance:distance,last:{x:(arr[0].x+arr[1].x)/2,y:(arr[0].y+arr[1].y)/2}};}else pinch=null;}
   });
   canvas.addEventListener("pointermove",function(e){if(uiModes.blocksWorld())return;var p=local(e);pointer=p;
@@ -407,8 +405,9 @@
   canvas.addEventListener("pointerleave",function(){if(!gesture)hover=null;});
   canvas.addEventListener("contextmenu",function(e){e.preventDefault();});
   canvas.addEventListener("wheel",function(e){e.preventDefault();if(uiModes.blocksWorld()||uiModes.recentlyClosed())return;var d=e.deltaY*(e.deltaMode===1?16:1);if(kit.mode==="binoculars"){kit.zoom=Math.max(1,Math.min(7,kit.zoom*Math.exp(-d*.0018)));renderGear();return;}if(overview)distance=Math.min(C.camera.max,camera.distance);manualCamera=true;cameraGesture();distance=Math.max(C.camera.min,Math.min(C.camera.max,distance*Math.exp(d*.0018)));if(e.deltaX)yaw-=e.deltaX*.003;},{passive:false});
-  function toggleOverview(){closeTools(false);overview=!overview;$("overview").setAttribute("aria-pressed",String(overview));}
+  function toggleOverview(){if(gallerySession)uiModes.reset("gallery-overview");closeTools(false);overview=!overview;$("overview").setAttribute("aria-pressed",String(overview));}
   var actionIcons={
+    view:"M3 11 8 4h8l5 7M5 11v9h14v-9M9 20v-7h6v7",
     chop:"M5 22 16 4M11 8l4-6 7 4-4 7-7-5Z",
     collect:"M8 13V7a1.5 1.5 0 0 1 3 0v5-7a1.5 1.5 0 0 1 3 0v7-5a1.5 1.5 0 0 1 3 0v6-3a1.5 1.5 0 0 1 3 0v6c0 4-2 6-6 6h-2c-2 0-3-1-4-3l-4-5a1.5 1.5 0 0 1 2-2l3 2",
     saw:"m2 16 12-12 8 3-2 5-4-1-2 3-2-1-2 3-2-1-2 3-4-2ZM16 7l3 1-1 2-3-1Z",
@@ -430,6 +429,7 @@
     if(job){var work=job.id?U.action(state,job.id):null;title=job.working&&work?work.label:"Смотритель идёт";mode="busy";}
     else if(nearby&&nearby.tag===selectedTag){action=nearby.action;tag=nearby.tag;title=action.object||"";detail=action.available?action.resultPreview||"":action.reason;mode=action.available?"normal":"disabled";}
     else visible=false;
+    $("gallery-select").hidden=state.lit||!visible||!!job||!nearby||["lighthouse","gallery"].indexOf(selectedTag)<0;$("gallery-select").textContent=selectedTag==="gallery"?"Огонь маяка":"Галерея";$("gallery-select").setAttribute("aria-label",selectedTag==="gallery"?"Выбрать огонь маяка":"Выбрать смотровую галерею маяка");
     view.context({visible:visible,title:title,detail:detail,action:action,tag:tag,mode:mode,job:!!job,working:!!(job&&job.working)});
   }
   function shedCommand(id){
@@ -476,8 +476,9 @@
   $("act").addEventListener("click",function(){if(this.hidden)return;var nearby=contextAction();if(nearby&&nearby.tag===this.getAttribute("data-action")){if(benchEnabled&&nearby.tag==="bench"){if(selectedTag==="bench"||benchState.focused)confirmBench();else selectBench();return;}interact(nearby.tag);if(!shedTag(nearby.tag))canvas.focus({preventScroll:true});}});
   document.addEventListener("keydown",function(e){
     if(document.querySelector("dialog[open]"))return;
-    if(e.code==="Escape"&&!uiModes.is("walk")){e.preventDefault();uiModes.back("escape");return;}
+    if(e.code==="Escape"&&!uiModes.is("walk")){e.preventDefault();if(!e.repeat)uiModes.back("escape");return;}
     if(e.code==="KeyB"&&!e.repeat){e.preventDefault();openBag();return;}
+    if(uiModes.is("gallery")&&e.code==="KeyE"){e.preventDefault();if(!e.repeat)useTool("binoculars");return;}
     if(uiModes.blocksWorld()){if(["ArrowUp","ArrowDown","ArrowLeft","ArrowRight","KeyW","KeyA","KeyS","KeyD","KeyE","KeyM","KeyF"].indexOf(e.code)>=0)e.preventDefault();return;}
     if(kit.mode==="binoculars"){
       if(["ArrowUp","ArrowDown","ArrowLeft","ArrowRight","KeyW","KeyA","KeyS","KeyD"].indexOf(e.code)>=0){e.preventDefault();if(!e.repeat||keys.has(e.code))keys.add(e.code);return;}
@@ -510,7 +511,7 @@
   document.addEventListener("fullscreenchange",fullscreenChanged);document.addEventListener("webkitfullscreenchange",fullscreenChanged);
   document.addEventListener("fullscreenerror",function(){if(fullscreenElement())fullscreenChanged();else fullscreenFallback("Браузер отклонил полный экран.");});fullscreenSync();
   $("overview").addEventListener("click",function(){toggleOverview();closeMenu();canvas.focus({preventScroll:true});});
-  function resetCamera(){closeTools(false);manualCamera=false;resultView=null;cameraGesture();yaw=C.camera.yaw;pitch=C.camera.pitch;distance=C.camera.distance;}
+  function resetCamera(){if(gallerySession)uiModes.reset("gallery-reset-camera");closeTools(false);manualCamera=false;resultView=null;cameraGesture();yaw=C.camera.yaw;pitch=C.camera.pitch;distance=C.camera.distance;}
   $("focus").addEventListener("click",function(){resetCamera();closeMenu();canvas.focus({preventScroll:true});});
   function toggleMenu(){if(uiModes.snapshot().pending)return;if(uiModes.is("menu")){uiModes.back("menu-toggle");return;}closeTools(false,true);pause(true);clearUIInput();uiModes.open("menu");view.invalidate();}
   // Some touch/fullscreen paths deliver pointerup without the compatibility
@@ -545,7 +546,7 @@
   $("menu-close").addEventListener("click",function(){uiModes.back("menu-close");});
   [["shed-details-toggle","shed-details"],["binocular-places-toggle","places"],["bag-places-toggle","bag-places"]].forEach(function(pair){$(pair[0]).addEventListener("click",function(){if(uiModes.snapshot().detail===pair[1])uiModes.back("detail-toggle");else uiModes.openDetail(pair[1]);});});
   ["shed-details-back","binocular-places-back","bag-places-back"].forEach(function(id){$(id).addEventListener("click",function(){uiModes.back("detail-back");});});
-  $("restart-confirm").addEventListener("click",function(){saveBlocked=false;state=M.create();shedOpen=false;job=null;hover=null;selectedTag=null;sitting=false;sitBlend=0;visited.clear();camera.x=state.avatar.x;camera.z=state.avatar.z;resetCamera();persist();refresh();uiModes.reset("restart-confirm");});
+  $("restart-confirm").addEventListener("click",function(){finishGallery();saveBlocked=false;state=M.create();shedOpen=false;job=null;hover=null;selectedTag=null;sitting=false;sitBlend=0;visited.clear();camera.x=state.avatar.x;camera.z=state.avatar.z;resetCamera();persist();refresh();uiModes.reset("restart-confirm");});
   globalThis.addEventListener("openai:set_globals",function(e){
     var incoming=e.detail&&e.detail.globals&&e.detail.globals.widgetState;if(!incoming||typeof incoming!=="object")return;
     hostEnvelope=Object.assign({},hostEnvelope,incoming);
@@ -574,6 +575,9 @@
   });
   $("bench-select").addEventListener("click",function(e){if(e.detail>0&&performance.now()<benchPointerClickUntil)return;selectBench(e);});$("bench-confirm").addEventListener("click",confirmBench);$("bench-pause").addEventListener("click",function(e){if(e.detail>0&&(e.detail>1||performance.now()-benchState.confirmedAt<350))return;pauseFromUI();renderBench(contextAction());});$("bench-dismiss").addEventListener("click",dismissBench);
   $("bench-select").addEventListener("focus",function(){benchState.focused=true;renderBench(contextAction());});$("bench-select").addEventListener("blur",function(){benchState.focused=false;});
+  $("gallery-select").addEventListener("click",function(){if(this.hidden||job||!uiModes.is("walk"))return;approach(selectedTag==="gallery"?"lighthouse":"gallery");canvas.focus({preventScroll:true});});
+  $("gallery-exit").addEventListener("click",function(){if(!uiModes.is("gallery")||uiModes.recentlyClosed())return;uiModes.back("gallery-exit");});
+  $("gallery-binoculars").addEventListener("click",function(){if(uiModes.is("gallery"))useTool("binoculars");});
   $("bag").addEventListener("click",openBag);$("bag-close").addEventListener("click",function(){closeTools();});
   $("gear-lantern").addEventListener("click",function(){unlock();useTool("lantern");});$("gear-binoculars").addEventListener("click",function(){useTool("binoculars");});
   $("tool-close").addEventListener("click",function(){closeTools();});$("binocular-minus").addEventListener("click",function(){changeZoom(-.5);});$("binocular-plus").addEventListener("click",function(){changeZoom(.5);});
@@ -584,6 +588,7 @@
     renderer:function(){return P.diagnostics();},
     gear:function(){return JSON.parse(JSON.stringify({bagOpen:kit.bagOpen,mode:kit.mode,zoom:optics.zoom,zoomTarget:kit.zoom,point:kit.point,observation:kit.mode==="binoculars"?optics:null,savedNormal:savedNormal}));},
     coast:function(){return CloseCoast.snapshot(coast);},
+    gallery:function(){return {active:!!gallerySession,repaired:!!state.galleryRepaired,session:gallerySession?JSON.parse(JSON.stringify(gallerySession)):null};},
     bench:function(){return {enabled:benchEnabled,variant:benchEnabled?"world":"classic",selected:selectedTag==="bench",near:nearBench(),busy:!!job&&job.id==="saw",working:!!job&&job.id==="saw"&&job.working,reason:clock<benchState.reasonUntil?benchState.reason:"",result:clock<benchState.resultUntil?benchState.result:"",hitRect:benchHit?Object.assign({},benchHit):null};},
     performance:function(){var stats=P.stats||{};return {renderer:P.mode,quality:quality,fps:perf.fps,renderMs:perf.renderMs,renderP50Ms:percentile(cpuSamples,.5),renderP95Ms:percentile(cpuSamples,.95),intervalP50Ms:percentile(intervalSamples,.5),intervalP95Ms:percentile(intervalSamples,.95),sampleMs:perf.sampleMs,frames:perf.frames,dpr:P.pixelRatio,width:canvas.clientWidth,height:canvas.clientHeight,faces:stats.faces===undefined?null:stats.faces,generatedFaces:stats.generatedFaces===undefined?null:stats.generatedFaces,triangles:stats.triangles===undefined?null:stats.triangles,drawCalls:stats.drawCalls===undefined?null:stats.drawCalls};},
     environment:function(){return {time:islandTime,wind:{x:wind.x,z:wind.z,strength:wind.strength},seaPhase:(islandTime*.12)%1,reducedMotion:reducedMotion,motionPreference:motionOverride===null?"system":"user",audio:{initialized:!!audio,state:audio?audio.state:"uninitialized",muted:muted,wind:ambientLevels.wind,leaves:ambientLevels.leaves,surf:ambientLevels.surf,contextsCreated:audioContexts}};},
@@ -595,6 +600,6 @@
     interface:function(){return {input:view.root.dataset.input,panel:view.root.dataset.panel,scene:view.layout(),saveError:!!view.errorKey,saveErrorRead:view.errorRead};},
     camera:function(){var p=actorPosition(),h=M.height(p.x,p.z),a=P.project([p.x,h,p.z]),b=P.project([p.x,h+1.8,p.z]);return {distance:camera.distance,yaw:camera.yaw,pitch:camera.pitch,targetDistance:distance,targetYaw:yaw,targetPitch:pitch,overview:overview,manual:manualCamera,framing:job&&job.working?"work":resultView&&clock-resultView.at<3?"result":job&&job.path.length?"walk":"idle",keeperPixels:a&&b?Math.abs(a.y-b.y):0,renderer:P.mode,faces:P.stats?P.stats.faces:0};}
   };
-  function allTags(){return state.trees.map(function(t){return (t.felled?"logs:":"tree:")+t.id;}).concat(state.shore.filter(function(d){return !d.collected;}).map(function(d){return "drift:"+d.id;}),["bench","workshop","step","stairs","seat","lighthouse","shed:logs","shed:boards","shed:upgrade"]);}
+  function allTags(){return state.trees.map(function(t){return (t.felled?"logs:":"tree:")+t.id;}).concat(state.shore.filter(function(d){return !d.collected;}).map(function(d){return "drift:"+d.id;}),["bench","workshop","step","stairs","seat","lighthouse","gallery","shed:logs","shed:boards","shed:upgrade"]);}
   resize();P.camera(camera,camera.distance,camera.yaw,C.camera.pitch);refresh();requestAnimationFrame(frame);
 })();

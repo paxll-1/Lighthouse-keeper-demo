@@ -178,6 +178,30 @@
       if(P.quality!=='lighter'&&i%3===1)rock(P,bed,x+Math.cos(a)*.45,z+Math.sin(a)*.45,w*.52,w*.47,h*.65,'#758e94');
     }
   }
+  function artColor(role,fallback){return globalThis.ThreeIslandPreview?.materialLibrary?.materials?.[role]?.baseColor||fallback;}
+  // Hand-composed local reference, not random scatter. All geometry is retained
+  // and stays inside the existing pool/rock footprints; navigation is untouched.
+  function poolSurface(P,H,pool){
+    const wet=artColor('wetSlate','#627c7c'),water=artColor('waterTeal','#77aaa5'),foam=artColor('foamIvory','#d8ddc4');
+    const center=[pool.x,H(pool.x,pool.z)+.021,pool.z],rings=[];
+    for(let i=0;i<28;i++){
+      const a=i*TAU/28,k=1+.045*Math.sin(a*3+.4)+.025*Math.cos(a*7),x=pool.x+Math.cos(a)*pool.rx*k,z=pool.z+Math.sin(a)*pool.rz*k;
+      rings.push([x,H(x,z)+.019,z]);
+    }
+    for(let i=0;i<rings.length;i++){
+      const a=rings[i],b=rings[(i+1)%rings.length],outer=v=>{const x=pool.x+(v[0]-pool.x)*1.1,z=pool.z+(v[2]-pool.z)*1.18;return[x,H(x,z)+.014,z];};
+      P.poly([a,b,center],i%7===0?'#83b1ac':water);
+      P.poly([a,outer(a),outer(b),b],wet,.68);
+      if((i>1&&i<6)||(i>13&&i<17)){
+        const inner=v=>[pool.x+(v[0]-pool.x)*.97,v[1]+.008,pool.z+(v[2]-pool.z)*.97];
+        P.poly([a,b,inner(b),inner(a)],foam,.55);
+      }
+    }
+    // Two broader submerged shelf shapes give depth without translucent layers
+    // covering the animals. Edges remain broken, never a straight stripe.
+    const shelf=[[pool.x-.58,pool.z+.2],[pool.x-.14,pool.z+.26],[pool.x+.27,pool.z+.08],[pool.x+.48,pool.z-.13]];
+    ribbon(P,H,shelf,.055,'#91b4a6',.028);
+  }
   function cove(P,H){
     const E=extension(),outline=E.outline,old=Array.from({length:64},(_,i)=>coastPoint(i,64));
     for(const face of triangles(outline)){
@@ -204,9 +228,8 @@
     ellipse(P,H,18.45,2.6,.65,.78,'#d4c5a1',.014,12);
     E.rocks.forEach((r,i)=>rock(P,H,r.x,r.z,r.rx,r.rz,r.height,i<2?'#8c9d95':i%2?'#a0aa96':'#929e92'));
     const pool=E.pool;
-    ellipse(P,H,pool.x,pool.z,pool.rx*1.22,pool.rz*1.6,'#a2ad94',.01,16);
-    ellipse(P,H,pool.x,pool.z,pool.rx,pool.rz,'#79a7a0',.017,16);
-    ribbon(P,H,[[19.55,6.08],[20.05,5.98],[20.65,6.01]],.025,'#d0ddc4',.02);
+    ellipse(P,H,pool.x,pool.z,pool.rx*1.22,pool.rz*1.6,artColor('sandMuted','#b9b493'),.01,20);
+    poolSurface(P,H,pool);
     for(const [x,z,turn] of [[19.05,5.7,.25],[21.05,6.4,-.25],[20.9,5.56,.65]]){
       P.group({x,y:H(x,z)+.02,z,ry:turn},()=>{
         P.poly([[-.24,0,0],[.2,.004,.07],[.34,0,.13],[.13,0,.13]],'#758878');
@@ -408,7 +431,7 @@
   G.CloseWorld={draw(P,s,env={}){
     const M=G.CloseModel,C=M.config,H=(x,z)=>M.height(x,z);
     const q=P.quality||'standard';
-    keep(P,'world:terrain:cove1:'+q,()=>{terrain(P,H);coast(P,H);groundDressing(P,H,C);cove(P,H);});
+    keep(P,'world:terrain:cove2:'+q,()=>{terrain(P,H);coast(P,H);groundDressing(P,H,C);cove(P,H);});
     keep(P,'world:nature-beds:'+q,()=>natureBeds(P,H));
     keep(P,'world:shore-ecology:'+q,()=>shoreEcology(P,H));
     keep(P,'world:ledge:'+Number(!!s.stairs)+':'+q,()=>ledge(P,H,s,C));

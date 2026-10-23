@@ -272,10 +272,10 @@
     if(env.work?.id!=='saw')return;
     P.tag('bench',()=>{
       if(env.work.progress<.86){
-        log(P,3.76,1.29,-1.6,2.02,.22);
-        const q=Math.sin((env.work.cycle||0)*TAU)*.22;
-        P.poly([[4.2,1.2,-1.95+q],[4.2,1.56,-1.8+q],[4.2,1.56,-.93+q],[4.2,1.26,-1.01+q]],'#b6c5bf');
-        P.box(4.2,1.56,-.86+q,.13,.21,.29,C.timber);
+        // The held native saw is the single working tool. Put the same log
+        // against the near workbench edge, within the unchanged tabletop.
+        // This placement is presentation only: no stock/collision/event changes.
+        log(P,3.9,1.29,-1.25,2.02,.22);
       }else for(let i=0;i<2;i++)P.box(4.2,1.16+i*.13,-1.45,1.45,.12,.27,'#cda66e');
     });
   }
@@ -321,6 +321,65 @@
       P.cylinder(10,5.65,-7,.7,.7,.74,env.night>.2?'#edca83':'#8facaa',8);
       P.cylinder(10,5.61,-7,.14,.21,.4,env.night>.2?'#ffe1a0':'#b7bc9d',8);
       if((env.night||0)>.05)P.blob(10,5.65,-7,.77,.43,.77,'#edca83',Math.min(.13,env.night*.13));
+    });
+  }
+  function galleryBeam(P,a,b,width,color){
+    // A small box between endpoints; no new renderer primitive or live mesh.
+    const dx=b[0]-a[0],dy=b[1]-a[1],dz=b[2]-a[2],length=Math.hypot(dx,dy,dz),flat=Math.hypot(dx,dz);
+    const u=flat?[dz/flat*width/2,0,-dx/flat*width/2]:[width/2,0,0];
+    const v=[dy*u[2]/length,(dz*u[0]-dx*u[2])/length,-dy*u[0]/length];
+    const corners=p=>[[1,1],[-1,1],[-1,-1],[1,-1]].map(([s,t])=>p.map((n,i)=>n+s*u[i]+t*v[i]));
+    const aa=corners(a),bb=corners(b);
+    P.poly(aa.slice().reverse(),color);P.poly(bb,color);
+    for(let i=0;i<4;i++){const j=(i+1)%4;P.poly([aa[i],aa[j],bb[j],bb[i]],color);}
+  }
+  function gallery(P,repaired){
+    // A southern timber extension outside the original metal service ring.
+    // It is selected separately from the unchanged tower and lamp.
+    P.tag('gallery',()=>{
+      const at=(a,r,y)=>[10+Math.cos(a)*r,y,-7+Math.sin(a)*r];
+      const segments=10,deck=5.28,outer=1.95,inner=.94;
+      for(let i=0;i<=segments;i++){
+        const a=i*Math.PI/segments;
+        if(repaired){
+          galleryBeam(P,at(a,.76,4.13),at(a,outer-.08,deck-.09),.105,'#8e8061');
+          galleryBeam(P,at(a,inner,deck-.075),at(a,outer,deck-.075),.11,'#866d4c');
+          P.box(10+Math.cos(a)*outer,5.79,-7+Math.sin(a)*outer,.095,1.07,.095,'#9e8057');
+        }else if(i%3===0){
+          // Broken beams and a few short remnants make the missing half clear.
+          galleryBeam(P,at(a,.8,4.58),at(a,1.54,deck-.13),.095,'#797c65');
+          galleryBeam(P,at(a,inner,deck-.12),at(a,1.58,deck-.2),.105,'#827558');
+          if(i===3||i===6)P.box(10+Math.cos(a)*1.55,5.48,-7+Math.sin(a)*1.55,.08,.42,.08,'#7b7960');
+        }
+      }
+      for(let i=0;i<segments;i++){
+        const a=i*Math.PI/segments,b=(i+1)*Math.PI/segments;
+        if(repaired){
+          const aa=a+.007,bb=b-.007;
+          P.poly([at(aa,inner,deck),at(aa,outer,deck),at(bb,outer,deck),at(bb,inner,deck)],i%3?'#c6a371':'#d9b983');
+          P.poly([at(a,outer,deck-.14),at(b,outer,deck-.14),at(b,outer,deck),at(a,outer,deck)],'#9b7a51');
+          galleryBeam(P,at(a,outer,6.31),at(b,outer,6.31),.085,'#b59a6d');
+          galleryBeam(P,at(a,outer,5.79),at(b,outer,5.79),.065,'#9e845e');
+          if(P.quality!=='lighter'){
+            const mid=(a+b)/2;
+            P.box(10+Math.cos(mid)*outer,5.79,-7+Math.sin(mid)*outer,.045,.97,.045,'#927e5f');
+          }
+        }else if(i===0||i===8){
+          P.poly([at(a+.02,inner,deck-.02),at(a+.02,1.46,deck-.1),at(b-.05,1.39,deck-.12),at(b-.05,inner,deck-.02)],'#8c8064');
+        }
+      }
+      if(repaired){
+        // End rails close the sides back to the retained metal service ring.
+        for(const a of [0,Math.PI])for(const y of [5.79,6.31])galleryBeam(P,at(a,inner,y),at(a,outer,y),.075,'#a68b62');
+      }else {
+        // A low, tagged repair trestle is visible and selectable from the ground.
+        for(const x of [9.52,10.48]){
+          galleryBeam(P,[x,.02,-5.72],[x,.83,-5.98],.09,'#897455');
+          galleryBeam(P,[x,.02,-6.24],[x,.83,-5.98],.09,'#897455');
+        }
+        P.box(10,.84,-5.98,1.28,.1,.33,'#9b805a');
+        P.group({x:10,y:.94,z:-5.96,ry:.13},()=>P.box(0,0,0,1.55,.09,.18,'#b99b6a'));
+      }
     });
   }
   function trunk(P,index){
@@ -409,6 +468,7 @@
     keep(P,'scene:shed-logs:'+level+':'+s.logs+':'+q,()=>shedLogs(P,s.logs,level));
     keep(P,'scene:shed-boards:'+level+':'+s.boards+':'+q,()=>shedBoards(P,s.boards,level));
     keep(P,'scene:lighthouse:'+q,()=>lighthouse(P));
+    keep(P,'scene:gallery:'+Number(s.galleryRepaired===true)+':'+q,()=>gallery(P,s.galleryRepaired===true));
     houseSmoke(P,env);restingSaw(P,env);benchWork(P,env);lantern(P,env);
     (s.trees||[]).forEach((t,i)=>{
       const flags=Number(!!t.felled)+':'+Number(!!t.collected);

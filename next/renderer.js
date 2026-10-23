@@ -1,4 +1,5 @@
 import * as THREE from './vendor/three.module.min.js';
+import { AuthoredRenderer } from './authored-renderer.js';
 
 // The game owns time, animation, audio and the frame loop. This adapter owns only
 // the visible WebGL2 canvas, retained triangle batches and world-space picking.
@@ -68,6 +69,24 @@ export function projectPoint(view, width, p) {
   if (!view) return null;
   const d = sub(p, view.eye), z = dot(d, view.forward);
   return z < NEAR ? null : { x: (view.centerX ?? width * .5) + dot(d, view.right) * view.scale / z, y: view.centerY - dot(d, view.up) * view.scale / z, z };
+}
+
+// Native Mesh/SkinnedMesh and retained RawShader batches share one eye, basis,
+// focal length, off-axis principal point and near/far depth mapping. The raw
+// batches deliberately retain their own uniforms and world-space attributes.
+export function syncPerspectiveCamera(camera, view, width, height) {
+  camera.near = NEAR; camera.far = FAR; camera.aspect = width / height;
+  camera.fov = THREE.MathUtils.radToDeg(2 * Math.atan(height / (2 * view.scale)));
+  camera.zoom = 1; camera.updateProjectionMatrix();
+  // Three looks down -Z; our batch convention measures positive forward depth.
+  camera.projectionMatrix.elements[8] = 1 - 2 * (view.centerX ?? width * .5) / width;
+  camera.projectionMatrix.elements[9] = 2 * view.centerY / height - 1;
+  camera.projectionMatrixInverse.copy(camera.projectionMatrix).invert();
+  const r = view.right, u = view.up, f = view.forward, e = view.eye;
+  camera.matrixWorld.set(r[0], u[0], -f[0], e[0], r[1], u[1], -f[1], e[1], r[2], u[2], -f[2], e[2], 0, 0, 0, 1);
+  camera.matrixWorld.decompose(camera.position, camera.quaternion, camera.scale);
+  camera.updateMatrixWorld(true);
+  return camera;
 }
 
 function screenRay(view, width, x, y) {
@@ -336,7 +355,9 @@ export class Renderer {
     this.canvas = canvas;
     this.backend = new THREE.WebGLRenderer({ canvas, context: gl, ...CONTEXT });
     this.backend.setPixelRatio(1); this.backend.autoClear = true; this.backend.setClearColor(0x4c9399, 1);
-    this.backend.outputColorSpace = THREE.LinearSRGBColorSpace; this.backend.toneMapping = THREE.NoToneMapping;
+    // Authored glTF colors need sRGB output. RawShaderMaterials do not include
+    // Three's colorspace chunk and keep their existing display-space output.
+    this.backend.outputColorSpace = THREE.SRGBColorSpace; this.backend.toneMapping = THREE.NoToneMapping;
     this.mode = 'three-webgl2'; this.quality = 'standard'; this.detail = true; this.pixelRatio = 1;
     this.keeperFocus = this.observation = this.lantern = null; this.night = this.daylight = 0;
     this._width = this._height = 1; this._view = null; this._disposed = this._contextLost = false;
@@ -345,7 +366,7 @@ export class Renderer {
     this._programIds = new WeakSet(); this._compilations = 0;
     this._faces = []; this._dynamic = []; this._effects = []; this._selection = [];
     this._stack = [ID]; this._tag = ''; this._colors = new Map(); this._tags = new Map(); this._staticAlpha = 0;
-    this._scene = new THREE.Scene(); this._camera = new THREE.Camera();
+    this._scene = new THREE.Scene(); this._camera = new THREE.PerspectiveCamera(50, 1, NEAR, FAR); this._authored = null;
     this._uniforms = {
       uEye: { value: new THREE.Vector3() }, uRight: { value: new THREE.Vector3(1, 0, 0) }, uUp: { value: new THREE.Vector3(0, 1, 0) }, uForward: { value: new THREE.Vector3(0, 0, -1) },
       uScale: { value: new THREE.Vector2(1, 1) }, uShift: { value: 0 }, uShiftX: { value: 0 }, uNight: { value: 0 }, uDistance: { value: 20 }, uHover: { value: 0 },
@@ -403,6 +424,7 @@ export class Renderer {
     u.uShift.value = 1 - 2 * v.centerY / this._height; u.uShiftX.value = 2 * (v.centerX ?? this._width * .5) / this._width - 1; u.uDistance.value = distance;
     this._backgroundUniforms.uHorizon.value = v.centerY - Math.tan(v.pitch) * v.scale; this._backgroundUniforms.uYaw.value = v.yaw;
     this.detail = distance < 25 && this.quality !== 'lighter';
+    if (this._camera?.isPerspectiveCamera) syncPerspectiveCamera(this._camera, v, this._width, this._height);
   }
   project(p) { return projectPoint(this._view, this._width, p); }
   ground(x, y, heightAt) { return groundPoint(this._view, this._width, x, y, heightAt); }
@@ -413,7 +435,20 @@ export class Renderer {
     this._frame++; this.night = night; this.daylight = daylight;
     this._dynamic.length = this._effects.length = this._active.length = 0; this._faces = this._dynamic; this._stack = [ID]; this._tag = ''; this._flushed = false;
     this._uniforms.uNight.value = clamp(night || 0, 0, 1); this._backgroundUniforms.uDaylight.value = daylight || 0; this._backgroundUniforms.uTime.value = time || 0;
+    this._authored?.begin();
   }
+
+  // Loading is a separate explicit bootstrap gate; ownership transfers here.
+  // The game chooses poses and advances mixers with its existing update dt.
+  installAuthoredAssets(assets) {
+    if (this._disposed) throw new Error('Cannot install assets on a disposed renderer.');
+    if (this._authored) throw new Error('Authored assets are already installed.');
+    this._authored = new AuthoredRenderer(this._scene, assets);
+    return this._authored.inspect();
+  }
+  authoredReady(kind) { return this._authored?.ready(kind) || false; }
+  drawAuthored(kind, id, pose) { return this._authored ? this._authored.draw(kind, id, pose) : false; }
+  updateAuthored(dt) { this._authored?.update(dt); }
 
   retain(key, fn) {
     if (this._disposed) return;
@@ -483,6 +518,7 @@ export class Renderer {
     const lantern = lanternState(this.lantern, this.quality);
     this._uniforms.uLanternPosition.value.fromArray(lantern.position);
     this._uniforms.uLanternStrength.value = lantern.strength; this._uniforms.uLanternRadius.value = lantern.radius;
+    this._authored?.environment({ night: this.night || 0, distance: this._view.distance, lantern, quality: this.quality });
     this._flushed = true;
     // Bound historical state/quality variants. Current chunks stay available.
     if (this._cache.size > MAX_CACHE_CHUNKS || this._cachedVertices > MAX_CACHE_VERTICES) {
@@ -553,6 +589,9 @@ export class Renderer {
       view: this._view ? { ...this._view, eye: [...this._view.eye], forward: [...this._view.forward], right: [...this._view.right], up: [...this._view.up],
         opticalZoom: this._view.opticalZoom || 1, observation: !!this._view.observation } : null,
       lantern: { position: this._uniforms.uLanternPosition.value.toArray(), strength: this._uniforms.uLanternStrength.value, radius: this._uniforms.uLanternRadius.value, shadowRays: false },
+      camera: { type: this._camera.type, near: this._camera.near, far: this._camera.far, fov: this._camera.fov, aspect: this._camera.aspect,
+        projectionMatrix: this._camera.projectionMatrix.toArray(), worldMatrix: this._camera.matrixWorld.toArray(), sharedNativeProjection: true },
+      authored: this._authored?.inspect() || { ready: false, kinds: [] },
       disposed: this._disposed, contextLost: this._contextLost };
   }
 
@@ -573,6 +612,7 @@ export class Renderer {
     this._disposed = true;
     this.canvas.removeEventListener('webglcontextlost', this._onLost); this.canvas.removeEventListener('webglcontextrestored', this._onRestored);
     this._statusNode?.remove(); this._background.geometry.dispose(); this._background.geometry.deleteAttribute('position'); this._background.material.dispose();
+    this._authored?.dispose();
     for (const b of this._batches) b.dispose(); for (const m of this._materials) m.dispose();
     this._scene.clear(); this.backend.dispose(); this._cache.clear(); this._colors.clear(); this._tags.clear(); this._lastActive.length = this._active.length = this._dynamic.length = this._effects.length = this._selection.length = 0;
     this._cachedVertices = this._staticAlpha = 0;
