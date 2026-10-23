@@ -1,6 +1,6 @@
 // Start the game owner only after the renderer can create WebGL2. The storage
 // experiment keeps a separate save branch; unsupported browsers touch neither.
-const BUILD = 'island-art-foundation-2026-10-23-r1';
+const BUILD = 'island-lighthouse-quality-2026-10-23-r1';
 globalThis.ThreeIslandPreview = { build: BUILD, ready: false, error: null };
 const status = document.getElementById('boot-status');
 function failed(error) {
@@ -24,13 +24,17 @@ try {
   await import('./interface.js?build='+BUILD);
   await import('./gear.js?build='+BUILD);
   await import('./bench-ui.js?build='+BUILD);
-  const { loadAuthoredAssets } = await import('./asset-loader.js?build='+BUILD);
+  const { loadAuthoredAssets, disposeAuthoredAssets } = await import('./asset-loader.js?build='+BUILD);
   const paletteResponse = await fetch('./assets/materials/library.json?build='+BUILD);
   if (!paletteResponse.ok) throw new Error('Material library unavailable');
   ThreeIslandPreview.materialLibrary = await paletteResponse.json();
   ThreeIslandPreview.authoredAssets = await loadAuthoredAssets({ build: BUILD, onProgress: ({kind}) => {
     document.getElementById('boot-message').textContent = kind === 'keeper' ? 'Готовим смотрителя…' : 'Готовим берег…';
   }});
+  const { loadLighthouseAsset } = await import('./lighthouse-loader.js?build='+BUILD);
+  document.getElementById('boot-message').textContent = 'Готовим маяк…';
+  try { ThreeIslandPreview.lighthouseAsset = await loadLighthouseAsset({ build: BUILD }); }
+  catch (error) { disposeAuthoredAssets(ThreeIslandPreview.authoredAssets); throw error; }
   await import('./app.js?build='+BUILD);
   if (!globalThis.CloseDemo) throw new Error('Game startup did not complete');
   ThreeIslandPreview.ready = true;

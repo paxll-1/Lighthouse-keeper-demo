@@ -467,9 +467,16 @@
     keep(P,'scene:shed-structure:'+level+':'+q,()=>P.tag('shed:logs',()=>shedStructure(P,level)));
     keep(P,'scene:shed-logs:'+level+':'+s.logs+':'+q,()=>shedLogs(P,s.logs,level));
     keep(P,'scene:shed-boards:'+level+':'+s.boards+':'+q,()=>shedBoards(P,s.boards,level));
-    keep(P,'scene:lighthouse:'+q,()=>lighthouse(P));
-    keep(P,'scene:gallery:'+Number(s.galleryRepaired===true)+':'+q,()=>gallery(P,s.galleryRepaired===true));
-    houseSmoke(P,env);restingSaw(P,env);benchWork(P,env);lantern(P,env);
+    if(typeof P.drawLighthouse==='function'){
+      keep(P,'scene:lighthouse-ground:'+q,()=>P.shadow(10,-7,1.65,1.35));
+      P.drawLighthouse({galleryRepaired:s.galleryRepaired===true,night:env.night||0,selected:env.selected||null});
+    }
+    else {
+      keep(P,'scene:lighthouse:'+q,()=>lighthouse(P));
+      keep(P,'scene:gallery:'+Number(s.galleryRepaired===true)+':'+q,()=>gallery(P,s.galleryRepaired===true));
+      lantern(P,env);
+    }
+    houseSmoke(P,env);restingSaw(P,env);benchWork(P,env);
     (s.trees||[]).forEach((t,i)=>{
       const flags=Number(!!t.felled)+':'+Number(!!t.collected);
       keep(P,'scene:tree-ground:'+t.id+':'+Number(!!t.felled)+':'+q,()=>treeGround(P,t));

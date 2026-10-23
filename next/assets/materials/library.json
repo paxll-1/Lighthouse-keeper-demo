@@ -3,13 +3,116 @@
   "id": "lk.palette.coast.v1",
   "colorSpace": "baseColor hex is sRGB; convert to linear for shader factors; exported glTF factors are linear",
   "materials": {
-    "coatOchre": {"baseColor": "#B9893C", "roughness": 0.88, "metalness": 0, "intent": "Warm matte wool/oilskin; broad cloth shapes carry the color"},
-    "keeperDark": {"baseColor": "#29423E", "roughness": 0.83, "metalness": 0, "intent": "Deep cool leather, trousers and hidden hood cavity"},
-    "crabRust": {"baseColor": "#AA6B50", "roughness": 0.64, "metalness": 0, "intent": "Restrained rust chitin, rounded upper shell; vertex color darkens eyes using this same material"},
-    "wetSlate": {"baseColor": "#4E6963", "roughness": 0.51, "metalness": 0, "intent": "Cool darker wet stone at the pool edge"},
-    "sandMuted": {"baseColor": "#B6AF83", "roughness": 0.95, "metalness": 0, "intent": "Quiet warm ground behind the local animal"},
-    "waterTeal": {"baseColor": "#80AFA9", "roughness": 0.44, "metalness": 0, "intent": "Muted shallow water, brighter than wet edge"},
-    "foamIvory": {"baseColor": "#DFDDC6", "roughness": 0.91, "metalness": 0, "intent": "Sparing broken foam accents"}
+    "coatOchre": {
+      "baseColor": "#B9893C",
+      "roughness": 0.88,
+      "metalness": 0,
+      "intent": "Warm matte wool/oilskin; broad cloth shapes carry the color"
+    },
+    "keeperDark": {
+      "baseColor": "#29423E",
+      "roughness": 0.83,
+      "metalness": 0,
+      "intent": "Deep cool leather, trousers and hidden hood cavity"
+    },
+    "crabRust": {
+      "baseColor": "#AA6B50",
+      "roughness": 0.64,
+      "metalness": 0,
+      "intent": "Restrained rust chitin, rounded upper shell; vertex color darkens eyes using this same material"
+    },
+    "wetSlate": {
+      "baseColor": "#4E6963",
+      "roughness": 0.51,
+      "metalness": 0,
+      "intent": "Cool darker wet stone at the pool edge"
+    },
+    "sandMuted": {
+      "baseColor": "#B6AF83",
+      "roughness": 0.95,
+      "metalness": 0,
+      "intent": "Quiet warm ground behind the local animal"
+    },
+    "waterTeal": {
+      "baseColor": "#80AFA9",
+      "roughness": 0.44,
+      "metalness": 0,
+      "intent": "Muted shallow water, brighter than wet edge"
+    },
+    "foamIvory": {
+      "baseColor": "#DFDDC6",
+      "roughness": 0.91,
+      "metalness": 0,
+      "intent": "Sparing broken foam accents"
+    },
+    "lighthouseSurface": {
+      "baseColor": "#FFFFFF",
+      "roughness": 0.91,
+      "metalness": 0,
+      "intent": "Vertex-colored warm lime plaster, carved limestone and muted painted joinery; broad authored contact shading"
+    },
+    "lighthousePlaster": {
+      "baseColor": "#D8D2B6",
+      "roughness": 0.91,
+      "metalness": 0,
+      "intent": "Warm lime plaster; softened large wall planes with restrained broken lower edge"
+    },
+    "lighthouseStone": {
+      "baseColor": "#A2AA9B",
+      "roughness": 0.93,
+      "metalness": 0,
+      "intent": "Quiet cool cut stone, bevelled foundation and deep openings"
+    },
+    "lighthouseDoor": {
+      "baseColor": "#486F6A",
+      "roughness": 0.86,
+      "metalness": 0,
+      "intent": "Painted timber door with recessed panels and sparse worn edges"
+    },
+    "lighthouseMetal": {
+      "baseColor": "#47676A",
+      "roughness": 0.66,
+      "metalness": 0.32,
+      "intent": "Patinated standing-seam roof, iron lantern ribs and hand fittings; vertex colors distinguish iron from roof"
+    },
+    "lighthouseGlass": {
+      "baseColor": "#9CBDB7",
+      "roughness": 0.32,
+      "metalness": 0,
+      "opacity": 0.17,
+      "intent": "Near-only thin glazing, alpha blend; no transmission or refraction"
+    },
+    "lighthouseLamp": {
+      "baseColor": "#F0D49A",
+      "roughness": 0.43,
+      "metalness": 0,
+      "emissive": "#E9C683",
+      "intent": "Dedicated compact Fresnel lamp core; existing night environment owns intensity"
+    },
+    "lighthouseGallery": {
+      "baseColor": "#B1966D",
+      "roughness": 0.9,
+      "metalness": 0,
+      "intent": "Weathered gallery timber; single draw per state with authored top/underside and repair end colors"
+    },
+    "lighthouseIron": {
+      "baseColor": "#304D4E",
+      "roughness": 0.7,
+      "metalness": 0.32,
+      "intent": "Dark iron ribs and fittings, vertex role within lighthouseMetal"
+    },
+    "lighthouseBrass": {
+      "baseColor": "#B69A67",
+      "roughness": 0.66,
+      "metalness": 0.32,
+      "intent": "Sparing aged brass lamp and door fitting, vertex role within lighthouseMetal"
+    },
+    "lighthouseMasonryBand": {
+      "baseColor": "#A66E55",
+      "roughness": 0.91,
+      "metalness": 0,
+      "intent": "Narrow muted warm brick collar below the cornice"
+    }
   },
   "textures": [],
   "normalPolicy": "Authored smooth curved cloth/chitin, hard hem and boot sole; no normal textures",
