@@ -1,6 +1,6 @@
 // Start the game owner only after the renderer can create WebGL2. The storage
 // experiment keeps a separate save branch; unsupported browsers touch neither.
-const BUILD = 'island-lighthouse-quality-2026-10-23-r1';
+const BUILD = 'island-coastal-quality-2026-10-23-r1';
 globalThis.ThreeIslandPreview = { build: BUILD, ready: false, error: null };
 const status = document.getElementById('boot-status');
 function failed(error) {
@@ -35,6 +35,10 @@ try {
   document.getElementById('boot-message').textContent = 'Готовим маяк…';
   try { ThreeIslandPreview.lighthouseAsset = await loadLighthouseAsset({ build: BUILD }); }
   catch (error) { disposeAuthoredAssets(ThreeIslandPreview.authoredAssets); throw error; }
+  const { loadEnvironmentAsset } = await import('./environment-loader.js?build='+BUILD);
+  document.getElementById('boot-message').textContent = 'Готовим скалы и берег…';
+  try { ThreeIslandPreview.environmentAsset = await loadEnvironmentAsset({ build: BUILD }); }
+  catch (error) { disposeAuthoredAssets({ ...ThreeIslandPreview.authoredAssets, lighthouse: ThreeIslandPreview.lighthouseAsset }); throw error; }
   await import('./app.js?build='+BUILD);
   if (!globalThis.CloseDemo) throw new Error('Game startup did not complete');
   ThreeIslandPreview.ready = true;

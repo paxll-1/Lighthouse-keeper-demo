@@ -14,3 +14,8 @@ Third-party runtime code retains its own licenses outside this directory.
 The static lighthouse authored in VIS-003 is original project work under the
 same permission above. Its editable Blender source and export recipe remain
 private production files; the game includes only the exported building asset.
+
+The coastal environment kit authored in ENV-001 (jointed headland, weathered
+slab, broken boulder, grass and low scrub) is original project work under the
+same permission. Public geology/botany text informed the form rationale only;
+no source photographs, meshes, textures or other third-party art are included.

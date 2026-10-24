@@ -183,6 +183,7 @@
   // and stays inside the existing pool/rock footprints; navigation is untouched.
   function poolSurface(P,H,pool){
     const wet=artColor('wetSlate','#627c7c'),water=artColor('waterTeal','#77aaa5'),foam=artColor('foamIvory','#d8ddc4');
+    if(P.environmentReady?.())return coastalPool(P,H,pool);
     const center=[pool.x,H(pool.x,pool.z)+.021,pool.z],rings=[];
     for(let i=0;i<28;i++){
       const a=i*TAU/28,k=1+.045*Math.sin(a*3+.4)+.025*Math.cos(a*7),x=pool.x+Math.cos(a)*pool.rx*k,z=pool.z+Math.sin(a)*pool.rz*k;
@@ -201,6 +202,44 @@
     // covering the animals. Edges remain broken, never a straight stripe.
     const shelf=[[pool.x-.58,pool.z+.2],[pool.x-.14,pool.z+.26],[pool.x+.27,pool.z+.08],[pool.x+.48,pool.z-.13]];
     ribbon(P,H,shelf,.055,'#91b4a6',.028);
+  }
+  // A cleft-shaped shallow basin in the existing pool footprint. Planar water
+  // and painted bed/rim are cheap presentation, not excavated collision/tides.
+  function coastalPool(P,H,pool){
+    const outline=[[-.99,-.12],[-.73,-.67],[-.37,-.84],[-.16,-.56],[.20,-.94],[.72,-.65],[.99,-.08],[.76,.41],[.44,.82],[.04,.61],[-.44,.92],[-.84,.51]];
+    const ring=outline.map(([x,z])=>[pool.x+x*pool.rx,pool.z+z*pool.rz]);
+    const water=artColor('envPoolTeal','#70a39d'),wet=artColor('envSlateWet','#586f71');
+    for(let i=0;i<ring.length;i++){
+      const a=ring[i],b=ring[(i+1)%ring.length],out=v=>[pool.x+(v[0]-pool.x)*1.12,pool.z+(v[1]-pool.z)*1.22];
+      surface(P,H,[[pool.x,pool.z],a,b],i%4===0?'#82ada1':water,.021);
+      surface(P,H,[a,out(a),out(b),b],wet,.016);
+    }
+    ribbon(P,H,[[pool.x-.68,pool.z+.05],[pool.x-.32,pool.z-.08],[pool.x+.04,pool.z-.035]],.045,'#a3baaa',.026);
+    ribbon(P,H,[[pool.x+.22,pool.z-.17],[pool.x+.48,pool.z-.21],[pool.x+.65,pool.z-.13]],.016,'#d3ddc3',.028);
+  }
+  function coastalDressing(P,H){
+    // The worn visual link follows existing traversable ground; no route added.
+    ribbon(P,H,[[10.25,-4.25],[11.3,-3.15],[12.7,-2],[13.9,-1]],.63,'#d0c3a0',.014);
+    for(const [x,z,rx,rz] of [[11.8,-6.4,.5,.28],[13,-4.4,.57,.32],[13.6,-3.2,.44,.27],[15,-2.25,.45,.24],[17.5,-2.25,.46,.25],[20.45,.3,.42,.25],[20.4,3.55,.47,.28],[21.15,4.9,.46,.24]]){
+      naturePatch(P,H,x,z,rx,rz,74,'#a3aa86',.011);
+      naturePatch(P,H,x-.06,z+.03,rx*.65,rz*.62,78,'#88977b',.013);
+    }
+    // A broken damp edge, local to the low exposed cove, never a white outline.
+    ribbon(P,H,[[18.35,5.65],[18.86,6.18],[19.28,6.50],[19.70,6.82],[20.26,6.63],[20.80,6.48],[21.32,6.12]],.14,'#899c8a',.009);
+    for(const [x,z,rx,rz] of [[19.05,6.15,.22,.12],[21.35,6.02,.22,.10]]){
+      naturePatch(P,H,x,z,rx*1.25,rz*1.4,92,'#8c9f8c',.012);
+      naturePatch(P,H,x,z,rx,rz,93,'#83aaa1',.017);
+      ribbon(P,H,[[x-rx*.35,z-rz*.35],[x+rx*.25,z-rz*.45]],.013,'#c4d2b8',.021);
+    }
+  }
+  function coastalFoam(P,env){
+    const t=env.reducedMotion?0:env.time||0;
+    const parts=[[[18.10,5.72],[18.40,6.04],[18.66,6.20]],[[19.54,7.10],[19.88,7.02],[20.15,6.90]],[[21.28,6.64],[21.55,6.43],[21.70,6.19]]];
+    parts.forEach((points,i)=>{const a=.12+.10*(.5+.5*Math.sin(t*.65+i*2));
+      for(let j=1;j<points.length;j++){const p=points[j-1],q=points[j],dx=q[0]-p[0],dz=q[1]-p[1],len=Math.hypot(dx,dz),nx=-dz/len*.022,nz=dx/len*.022;
+        P.poly([[p[0],-.708,p[1]],[q[0],-.708,q[1]],[q[0]+nx,-.708,q[1]+nz],[p[0]+nx,-.708,p[1]+nz]],'#d7e0c8',a);
+      }
+    });
   }
   function cove(P,H){
     const E=extension(),outline=E.outline,old=Array.from({length:64},(_,i)=>coastPoint(i,64));
@@ -226,7 +265,7 @@
     // A few connected forms establish the gate, sheltered turn and low pool.
     ribbon(P,H,E.trail,1.0,'#dfcfa9',.013);
     ellipse(P,H,18.45,2.6,.65,.78,'#d4c5a1',.014,12);
-    E.rocks.forEach((r,i)=>rock(P,H,r.x,r.z,r.rx,r.rz,r.height,i<2?'#8c9d95':i%2?'#a0aa96':'#929e92'));
+    if(!P.environmentReady?.())E.rocks.forEach((r,i)=>rock(P,H,r.x,r.z,r.rx,r.rz,r.height,i<2?'#8c9d95':i%2?'#a0aa96':'#929e92'));
     const pool=E.pool;
     ellipse(P,H,pool.x,pool.z,pool.rx*1.22,pool.rz*1.6,artColor('sandMuted','#b9b493'),.01,20);
     poolSurface(P,H,pool);
@@ -354,6 +393,7 @@
   function garden(P,H,s,env){
     const time=env.time||0,wind=env.wind||{x:0,z:0,strength:0};
     for(let i=0;i<natureGroups.length;i++){
+      if(i===6&&P.environmentReady?.())continue;
       const [x,z,rx,rz]=natureGroups[i],y=H(x,z);
       if(P.visible&&!P.visible(x,y+.25,z,1.6))continue;
       const count=P.detail===false?4:9;
@@ -379,6 +419,7 @@
   }
   function natureBeds(P,H){
     for(let i=0;i<natureGroups.length;i++){
+      if(i===6&&P.environmentReady?.())continue;
       const [x,z,rx,rz]=natureGroups[i];
       naturePatch(P,H,x,z,rx,rz,i,'#95a17c');
       naturePatch(P,H,x-rx*.23,z-rz*.17,rx*.62,rz*.56,i+23,i<3?'#81977c':'#a5ae86',.013);
@@ -431,13 +472,16 @@
   G.CloseWorld={draw(P,s,env={}){
     const M=G.CloseModel,C=M.config,H=(x,z)=>M.height(x,z);
     const q=P.quality||'standard';
-    keep(P,'world:terrain:cove2:'+q,()=>{terrain(P,H);coast(P,H);groundDressing(P,H,C);cove(P,H);});
-    keep(P,'world:nature-beds:'+q,()=>natureBeds(P,H));
+    const authoredCoast=!!P.environmentReady?.();
+    if(authoredCoast)P.drawEnvironment(env);
+    keep(P,'world:terrain:cove2:'+q+':env'+Number(authoredCoast),()=>{terrain(P,H);coast(P,H);groundDressing(P,H,C);cove(P,H);if(authoredCoast)coastalDressing(P,H);});
+    keep(P,'world:nature-beds:'+q+':env'+Number(authoredCoast),()=>natureBeds(P,H));
     keep(P,'world:shore-ecology:'+q,()=>shoreEcology(P,H));
     keep(P,'world:ledge:'+Number(!!s.stairs)+':'+q,()=>ledge(P,H,s,C));
     const drift=(s.shore||C.shore).map(d=>d.id+Number(!!d.collected)).join(',');
     keep(P,'world:shore:'+drift+':'+q,()=>shore(P,H,s,C));
     keep(P,'world:seat:'+q,()=>seat(P,H,C));
+    if(authoredCoast)coastalFoam(P,env);
     water(P,env);quietDetails(P,H,env);garden(P,H,s,env);
     if(G.CloseCoast)G.CloseCoast.draw(P,env.coast,env);
   }};

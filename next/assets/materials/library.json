@@ -112,6 +112,72 @@
       "roughness": 0.91,
       "metalness": 0,
       "intent": "Narrow muted warm brick collar below the cornice"
+    },
+    "envRockSurface": {
+      "baseColor": "#FFFFFF",
+      "roughness": 0.91,
+      "metalness": 0,
+      "intent": "White carrier for all original ENV rock vertex colors; one shared opaque matte draw"
+    },
+    "envSlateDry": {
+      "baseColor": "#889A94",
+      "roughness": 0.91,
+      "metalness": 0,
+      "intent": "Dry cleaved coastal slate, cool muted upper planes"
+    },
+    "envSlateWet": {
+      "baseColor": "#4E6963",
+      "roughness": 0.91,
+      "metalness": 0,
+      "intent": "Optional runtime low exposed slate tint; apply by actual world height/exposure, never baked on every prototype base; matte color approximation only"
+    },
+    "envMoss": {
+      "baseColor": "#768765",
+      "roughness": 0.94,
+      "metalness": 0,
+      "intent": "Sparse muted moss in sheltered crack pockets above frequent wave wash"
+    },
+    "envGrassSurface": {
+      "baseColor": "#FFFFFF",
+      "roughness": 0.94,
+      "metalness": 0,
+      "intent": "White carrier for opaque folded grass leaves; vertex alpha is wind weight"
+    },
+    "envGrass": {
+      "baseColor": "#88996A",
+      "roughness": 0.94,
+      "metalness": 0,
+      "intent": "Wind-worn sage green grass leaves"
+    },
+    "envGrassTip": {
+      "baseColor": "#A4AD7C",
+      "roughness": 0.94,
+      "metalness": 0,
+      "intent": "Quiet straw/sage grass tips, small value contrast"
+    },
+    "envShrubSurface": {
+      "baseColor": "#FFFFFF",
+      "roughness": 0.95,
+      "metalness": 0,
+      "intent": "White carrier for opaque low scrub leaf mass; vertex alpha is wind weight"
+    },
+    "envShrub": {
+      "baseColor": "#617F69",
+      "roughness": 0.95,
+      "metalness": 0,
+      "intent": "Cool low coastal scrub in sheltered soil pockets"
+    },
+    "envShrubTip": {
+      "baseColor": "#8C9C78",
+      "roughness": 0.95,
+      "metalness": 0,
+      "intent": "Muted lighter new scrub growth"
+    },
+    "envShrubStem": {
+      "baseColor": "#576C59",
+      "roughness": 0.95,
+      "metalness": 0,
+      "intent": "Subdued woody basal stems in the same opaque scrub material; rooted wind mask"
     }
   },
   "textures": [],

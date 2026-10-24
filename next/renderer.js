@@ -1,6 +1,7 @@
 import * as THREE from './vendor/three.module.min.js';
 import { AuthoredRenderer } from './authored-renderer.js';
 import { LighthouseRenderer } from './lighthouse-renderer.js';
+import { EnvironmentRenderer } from './environment-renderer.js';
 
 // The game owns time, animation, audio and the frame loop. This adapter owns only
 // the visible WebGL2 canvas, retained triangle batches and world-space picking.
@@ -369,7 +370,7 @@ export class Renderer {
     this._programIds = new WeakSet(); this._compilations = 0;
     this._faces = []; this._dynamic = []; this._effects = []; this._selection = [];
     this._stack = [ID]; this._tag = ''; this._colors = new Map(); this._tags = new Map(); this._staticAlpha = 0;
-    this._scene = new THREE.Scene(); this._camera = new THREE.PerspectiveCamera(50, 1, NEAR, FAR); this._authored = null; this._lighthouse = null;
+    this._scene = new THREE.Scene(); this._camera = new THREE.PerspectiveCamera(50, 1, NEAR, FAR); this._authored = null; this._lighthouse = null; this._environment = null;
     this._uniforms = {
       uEye: { value: new THREE.Vector3() }, uRight: { value: new THREE.Vector3(1, 0, 0) }, uUp: { value: new THREE.Vector3(0, 1, 0) }, uForward: { value: new THREE.Vector3(0, 0, -1) },
       uScale: { value: new THREE.Vector2(1, 1) }, uShift: { value: 0 }, uShiftX: { value: 0 }, uNight: { value: 0 }, uDistance: { value: 20 }, uHover: { value: 0 },
@@ -439,7 +440,7 @@ export class Renderer {
     this._dynamic.length = this._effects.length = this._active.length = 0; this._faces = this._dynamic; this._stack = [ID]; this._tag = ''; this._flushed = false;
     this._uniforms.uNight.value = clamp(night || 0, 0, 1); this._backgroundUniforms.uDaylight.value = daylight || 0; this._backgroundUniforms.uTime.value = time || 0;
     this._authored?.begin();
-    this._lighthouse?.begin();
+    this._lighthouse?.begin(); this._environment?.begin();
   }
 
   // Loading is a separate explicit bootstrap gate; ownership transfers here.
@@ -449,12 +450,15 @@ export class Renderer {
     if (this._authored) throw new Error('Authored assets are already installed.');
     this._authored = new AuthoredRenderer(this._scene, assets);
     if (lighthouseAsset) this._lighthouse = new LighthouseRenderer(this._scene, this._camera, lighthouseAsset, this._authored.uniforms, { uFocus: this._uniforms.uFocus, uDpr: this._uniforms.uDpr });
+    if (globalThis.ThreeIslandPreview?.environmentAsset) this._environment = new EnvironmentRenderer(this._scene, this._camera, ThreeIslandPreview.environmentAsset, this._authored.uniforms, globalThis.CloseConfig, (x,z)=>globalThis.CloseModel.height(x,z));
     return this._authored.inspect();
   }
   drawLighthouse(environment) {
     if (!this._lighthouse) throw new Error('Static lighthouse must be loaded before the game starts.');
     return this._lighthouse.draw(environment);
   }
+  environmentReady() { return !!this._environment && !this._environment.disposed; }
+  drawEnvironment(env) { return this._environment?.draw(env) || false; }
   authoredReady(kind) { return this._authored?.ready(kind) || false; }
   drawAuthored(kind, id, pose) { return this._authored ? this._authored.draw(kind, id, pose) : false; }
   updateAuthored(dt) { this._authored?.update(dt); }
@@ -534,6 +538,7 @@ export class Renderer {
       const p = this.keeperFocus, feet = p && this.project([p[0], p[1] - 1.1, p[2]]), head = p && this.project([p[0], p[1] + .7, p[2]]);
       this._lighthouse.environment({ quality: this.quality, height: this._height, hover, keeperPixels: feet && head ? Math.abs(head.y - feet.y) : 0 });
     }
+    this._environment?.environment({ quality: this.quality, height: this._height });
     this._flushed = true;
     // Bound historical state/quality variants. Current chunks stay available.
     if (this._cache.size > MAX_CACHE_CHUNKS || this._cachedVertices > MAX_CACHE_VERTICES) {
@@ -545,7 +550,8 @@ export class Renderer {
   pick(x, y) {
     if (!this._view || this._disposed) return null;
     const ray = screenRay(this._view, this._width, x, y), rawHit = pickFaceHit(this._selection, this._view.eye, ray);
-    return (this._lighthouse ? this._lighthouse.pick(this._view.eye, ray, rawHit) : rawHit)?.tag || null;
+    const hit = this._lighthouse ? this._lighthouse.pick(this._view.eye, ray, rawHit) : rawHit;
+    return (this._environment ? this._environment.pick(this._view.eye, ray, hit) : hit)?.tag || null;
   }
 
   _screenWorld(x, y, depth) {
@@ -611,6 +617,7 @@ export class Renderer {
       camera: { type: this._camera.type, near: this._camera.near, far: this._camera.far, fov: this._camera.fov, aspect: this._camera.aspect,
         projectionMatrix: this._camera.projectionMatrix.toArray(), worldMatrix: this._camera.matrixWorld.toArray(), sharedNativeProjection: true },
       authored: this._authored?.inspect() || { ready: false, kinds: [] },
+      environment: this._environment?.inspect() || { ready: false },
       lighthouse: this._lighthouse?.inspect() || { ready: false, static: true },
       disposed: this._disposed, contextLost: this._contextLost };
   }
@@ -632,7 +639,7 @@ export class Renderer {
     this._disposed = true;
     this.canvas.removeEventListener('webglcontextlost', this._onLost); this.canvas.removeEventListener('webglcontextrestored', this._onRestored);
     this._statusNode?.remove(); this._background.geometry.dispose(); this._background.geometry.deleteAttribute('position'); this._background.material.dispose();
-    this._lighthouse?.dispose(); this._authored?.dispose();
+    this._environment?.dispose(); this._lighthouse?.dispose(); this._authored?.dispose();
     for (const b of this._batches) b.dispose(); for (const m of this._materials) m.dispose();
     this._scene.clear(); this.backend.dispose(); this._cache.clear(); this._colors.clear(); this._tags.clear(); this._lastActive.length = this._active.length = this._dynamic.length = this._effects.length = this._selection.length = 0;
     this._cachedVertices = this._staticAlpha = 0;
