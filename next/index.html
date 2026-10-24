@@ -4,16 +4,25 @@
 <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <meta name="color-scheme" content="light">
 <link rel="icon" href="data:,">
-<meta name="lighthouse-build" content="island-coastal-quality-2026-10-23-r1">
+<meta name="lighthouse-build" content="island-context-actions-2026-10-24-r2">
 <title>Маяк · Демка</title>
-<link rel="stylesheet" href="./ui.css?build=island-coastal-quality-2026-10-23-r1">
+<link rel="stylesheet" href="./ui.css?build=island-context-actions-2026-10-24-r2">
 </head>
 <body>
 <main class="game" id="game" aria-busy="true" data-input="mouse" data-panel="none" data-ui-mode="walk" data-ui-detail="none">
-  <canvas id="world" tabindex="0" role="application" aria-label="Остров смотрителя. Нажми на землю или предмет, чтобы подойти, затем подтверди короткую команду. Веди пальцем для поворота и наклона камеры, два пальца — масштаб. Управление и клавиши описаны в справке."></canvas>
+  <canvas id="world" tabindex="0" role="application" aria-label="Остров смотрителя. Нажми на землю или предмет, чтобы подойти. Значок дела рядом с предметом ведёт смотрителя к нему и начинает действие. Веди пальцем для поворота и наклона камеры, два пальца — масштаб. Управление и клавиши описаны в справке."></canvas>
 
 
-  <button id="act" type="button" class="action" aria-describedby="context-detail" aria-label="Начать работу" hidden><svg viewBox="0 0 24 24" aria-hidden="true"><path id="action-path"/></svg></button>
+  <div id="action-safe-bounds" class="action-safe-bounds" aria-hidden="true"></div>
+  <button id="act" type="button" class="action" aria-describedby="context-detail" aria-label="Начать работу" aria-keyshortcuts="E" hidden>
+    <svg class="action-progress" viewBox="0 0 64 64" aria-hidden="true"><circle class="action-progress-track" cx="32" cy="32" r="24"/><circle id="action-progress" cx="32" cy="32" r="24" pathLength="100"/></svg>
+    <svg class="action-glyph" viewBox="0 0 24 24" aria-hidden="true"><use class="action-outline" href="#action-path"/><path id="action-path"/></svg>
+    <svg class="action-state-mark" viewBox="0 0 16 16" aria-hidden="true"><path class="action-disabled-mark" d="m4 4 8 8m0-8-8 8"/><path class="action-result-mark" d="m3 8 3.5 4L13 4"/><path class="action-travel-mark" d="m3 5 3 3-3 3m6-6 3 3-3 3"/></svg>
+  </button>
+  <button id="action-pause" type="button" class="action-pause" aria-label="Приостановить работу" hidden><svg viewBox="0 0 24 24" aria-hidden="true"><path class="action-outline" d="M8 5v14M16 5v14"/><path d="M8 5v14M16 5v14"/></svg></button>
+  <button id="gallery-select" type="button" class="action-alternate" aria-label="Выбрать смотровую галерею маяка" data-icon="gallery" hidden><svg viewBox="0 0 24 24" aria-hidden="true"><use class="action-outline" href="#gallery-select-path"/><path id="gallery-select-path" d="M7 19V8h10v11M5 8h14M8 8V4h8v4M4 14h16M4 14v4h16v-4M8 14v4m4-4v4m4-4v4M5 21h14"/></svg></button>
+  <p id="action-note" class="action-note" role="status" aria-live="polite" aria-atomic="true" hidden><span id="action-note-copy"></span><kbd id="action-key" hidden>E</kbd></p>
+  <span id="action-progress-status" class="sr-only" role="progressbar" aria-label="Работа" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0" hidden></span>
   <div class="working" id="working" role="progressbar" aria-label="Работа" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0" hidden><span id="work-progress"></span></div>
 
   <div id="bench-ui" class="bench-ui" data-state="idle" hidden>
@@ -59,6 +68,8 @@
       <button id="sound" type="button" aria-pressed="false" aria-label="Выключить звук">Звук вкл.</button>
       <button id="motion" type="button" aria-pressed="false">Меньше движения: выкл.</button>
       <button id="quality" type="button" data-quality="standard" aria-pressed="false">Качество: стандарт</button>
+      <button id="lighting-view" type="button" aria-pressed="false" aria-describedby="lighting-hint">Осмотр: день</button>
+      <span id="lighting-hint" class="sr-only">Меняет только освещение для осмотра, без изменения игрового прогресса.</span>
       <button id="performance-toggle" type="button" aria-pressed="false" aria-controls="performance-panel">Показать плавность</button>
     </div>
     <button id="restart" type="button" class="quiet-danger" aria-haspopup="dialog" aria-controls="restart-dialog">Начать заново</button>
@@ -102,7 +113,7 @@
 
     <section class="context" id="context" aria-labelledby="context-title" data-state="normal" hidden>
       <div class="context-copy" role="status" aria-live="polite" aria-atomic="true"><strong id="context-title">Остров ждёт</strong><p id="context-detail">Нажми на дерево или плавник у берега — смотритель подойдёт.</p></div>
-      <div class="context-commands"><button id="context-command" type="button" class="primary" aria-describedby="context-detail" hidden>Начать</button><span id="context-key" class="keyboard-only context-key" hidden>или <kbd>E</kbd></span><button id="gallery-select" type="button" aria-label="Выбрать смотровую галерею маяка" hidden>Галерея</button><button id="pause-work" type="button" class="primary" hidden>Пауза</button></div>
+      <div class="context-commands"><button id="context-command" type="button" class="primary" aria-describedby="context-detail" hidden>Начать</button><span id="context-key" class="keyboard-only context-key" hidden>или <kbd>E</kbd></span><button id="pause-work" type="button" class="primary" hidden>Пауза</button></div>
     </section>
 
   </div>
@@ -130,7 +141,7 @@
   <div class="dialog-content">
     <span class="eyebrow">Как играть</span><h2 id="help-title">Остров в твоём темпе</h2>
     <p class="dialog-intro">Гуляй, занимайся делами или смотри на море. Пока смотритель стоит или отдыхает, день не проходит.</p>
-    <section class="help-section"><h3>Подойди и выбери дело</h3><p>Нажми на землю или предмет — смотритель подойдёт. У выбранного предмета появится короткая команда: подтверди её кнопкой<span class="keyboard-only">; клавиша <kbd>E</kbd> делает то же самое</span>.</p><p>«Пауза» останавливает работу, «Стоп» — путь. Можно также нажать на землю<span class="keyboard-only"> или <kbd>Esc</kbd></span>. Сделанная часть работы сохраняется. При попытке недоступного действия появится причина: это могут быть материалы, занятые руки или заполненный навес.</p></section>
+    <section class="help-section"><h3>Выбери дело рядом</h3><p>Нажми на значок инструмента рядом с предметом — смотритель сам подойдёт и начнёт дело<span class="keyboard-only">; клавиша <kbd>E</kbd> делает то же самое</span>. Нажатие на сам предмет только ведёт к нему.</p><p>Во время работы рядом со значком появляется пауза. Сделанная часть сохраняется. Новое направление на земле<span class="keyboard-only"> или <kbd>Esc</kbd></span> тоже прервёт дело или путь. При попытке недоступного действия появится причина: это могут быть материалы, занятые руки или заполненный навес.</p></section>
     <section class="help-section"><h3>От бревна к целой ступени</h3><p>Сруби дерево в роще или подбери плавник на берегу. Подними бревно в свободные руки, распили у верстака и принеси две доски к ступени дома. Смотритель работает сам после команды — ловить момент нажатия не нужно.</p><p>К берегу ведёт обход справа от каменной кромки. По желанию почини спуск: он откроет короткий путь к берегу и старому причалу. После ремонта дома можно зажечь маяк.</p></section>
     <section class="help-section"><h3>Запасы и руки</h3><p>Навес — крытая поленница у правого края мастерской. Подойди к ней и открой короткий выбор действий. «Сложить» убирает груз под крышу; «Взять бревно» и «Взять доски» кладут выбранный материал в руки.</p><p>Можно нести одно бревно или до двух досок. Неполный груз досок можно дополнить. При полном отсеке остаток останется в руках. Запас под крышей сначала возьми в руки: он не расходуется на расстоянии. Материал в руках можно нести прямо к верстаку или ремонту.</p><p>Улучшение стоит две доски из навеса и расширяет оба отсека. Перекладывание не расходует день; путь и работа занимают время.</p></section>
     <section class="help-section"><h3>Берег и сумка</h3><p>Кнопка сумки открывает фонарь и бинокль<span class="keyboard-only">; клавиша <kbd>B</kbd> делает то же самое</span>. Работа приостанавливается, сделанная часть и груз сохраняются. Фонарь светит у пояса во время прогулки. Бинокль приближает вид с места, где стоит смотритель.</p><p>Приближай кнопками «−» и «+», двумя пальцами или колесом. Открой «Места» и выбери направление без точного прицеливания. «Выйти» убирает бинокль и возвращает прежний вид<span class="keyboard-only">; <kbd>Esc</kbd> тоже закрывает инструмент, стрелки или <kbd>WASD</kbd> поворачивают взгляд, клавиши <kbd>−</kbd>/<kbd>+</kbd> меняют масштаб</span>.</p><p>На берегу можно спокойно смотреть на чаек. При близком подходе они взлетают, а спустя тихую паузу возвращаются.</p></section>
@@ -143,6 +154,6 @@
 <dialog id="restart-dialog" class="confirm-dialog" aria-labelledby="restart-title"><div class="dialog-content"><span class="eyebrow">Новое начало</span><h2 id="restart-title">Начать это утро заново?</h2><p>Ремонт и припасы этой пробы будут заменены начальным состоянием.</p></div><div class="dialog-actions"><button id="restart-cancel" type="button">Остаться здесь</button><button id="restart-confirm" class="primary" type="button">Начать заново</button></div></dialog>
 
 <section id="boot-status" class="boot-status" role="status" aria-live="polite"><svg class="boot-mark" viewBox="0 0 48 48" aria-hidden="true"><path d="m18 38 2-23h8l2 23M16 38h16M19 15h10M21 15V9h6v6M18 9l6-4 6 4M8 12l6 2m20 0 6-2M6 23l8-2m20 0 8 2"/></svg><h1>Остров смотрителя</h1><p id="boot-message">Готовим остров…</p><a id="legacy-link" href="./" hidden>Вернуться к демке</a></section>
-<script type="module" src="./bootstrap.js?build=island-coastal-quality-2026-10-23-r1"></script>
+<script type="module" src="./bootstrap.js?build=island-context-actions-2026-10-24-r2"></script>
 </body>
 </html>
